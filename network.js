@@ -26,39 +26,36 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 使用 PeerJS 默认配置 + 多个备用 TURN 服务器
+    // 服务器配置 - 使用 PeerJS 默认配置 + TURN 服务器
+    // API Key: 999e07ac7e7ea34c713f2c6fd80a9e7809ec
     this.peerOptions = {
       debug: 3,
       config: {
         iceServers: [
-          // Google STUN
+          // STUN 服务器
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
-          // Cloudflare STUN
-          { urls: 'stun:stun.cloudflare.com:3478' },
-          // 免费 TURN 服务器 (NAT 穿透失败时中继)
+          // Metered TURN 服务器 (API Key 作为凭据)
           {
             urls: 'turn:global.relay.metered.ca:80',
-            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
-            credential: 'Fw3RqIqV2N0lVkQr'
+            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
+            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
           },
           {
             urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
-            credential: 'Fw3RqIqV2N0lVkQr'
+            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
+            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
           },
           {
-            urls: 'turn:global.relay.metered.ca:443',
-            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
-            credential: 'Fw3RqIqV2N0lVkQr'
+            urls: 'turns:global.relay.metered.ca:443',
+            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
+            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
           },
           {
             urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
-            credential: 'Fw3RqIqV2N0lVkQr'
+            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
+            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
           }
         ]
       }
