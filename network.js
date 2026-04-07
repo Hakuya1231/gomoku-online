@@ -8,6 +8,8 @@ class GomokuNetwork {
     this.connected = false;
     this.remotePeerId = null;
     this.myPeerId = null;
+    this.connectionAttempts = 0;
+    this.maxConnectionAttempts = 5;
 
     // 回调函数
     this.onMove = null;
@@ -98,21 +100,20 @@ class GomokuNetwork {
     this.peer.on('error', (err) => {
       console.error('PeerJS 错误:', err);
 
-      // peer-unavailable 是目标peer不存在
+      // peer-unavailable 可能是主机还没准备好，尝试重试
       if (err.type === 'peer-unavailable') {
-        this.updateStatus('找不到对方，请确认链接正确或等待对方创建房间');
+        this.handleConnectionError(err);
       } else if (err.type === 'disconnected' || err.type === 'network') {
         this.updateStatus('网络断开，正在重连...');
         setTimeout(() => {
-          if (!this.peer.destroyed) {
+          if (this.peer && !this.peer.destroyed) {
             this.peer.reconnect();
           }
         }, 1000);
       } else {
         this.updateStatus('连接错误: ' + err.type);
+        if (this.onError) this.onError(err);
       }
-
-      if (this.onError) this.onError(err);
     });
 
     this.peer.on('disconnected', () => {
@@ -170,8 +171,8 @@ class GomokuNetwork {
 
   // 加入房间（作为客户端）
   joinRoom(roomId) {
-    if (!this.peer || !this.peer.id) {
-      this.updateStatus('等待 PeerJS 初始化...');
+    if (!this.myPeerId) {
+      this.updateStatus('等待网络初始化...');
       setTimeout(() => this.joinRoom(roomId), 500);
       return;
     }
@@ -183,12 +184,24 @@ class GomokuNetwork {
 
     this.roomId = roomId.trim();
     this.isHost = false;
-    this.remotePeerId = roomId; // 房间号就是主机的Peer ID
+    this.remotePeerId = roomId;
     this.updateUI();
 
-    this.updateStatus('正在连接房间...');
+    this.attemptConnection();
+  }
 
-    // 尝试连接到主机
+  // 尝试连接（带重试）
+  attemptConnection() {
+    this.updateStatus('正在连接房间...');
+    this.connectionAttempts = (this.connectionAttempts || 0) + 1;
+    this.maxConnectionAttempts = 5;
+
+    // 清理之前的连接
+    if (this.conn) {
+      this.conn.close();
+      this.conn = null;
+    }
+
     try {
       this.conn = this.peer.connect(this.remotePeerId, {
         reliable: true,
@@ -198,7 +211,17 @@ class GomokuNetwork {
       this.setupConnection(this.conn);
     } catch (err) {
       console.error('连接失败:', err);
-      this.updateStatus('连接失败: ' + err.message);
+      this.handleConnectionError(err);
+    }
+  }
+
+  // 处理连接错误（带重试）
+  handleConnectionError(err) {
+    if (err.type === 'peer-unavailable' && this.connectionAttempts < this.maxConnectionAttempts) {
+      this.updateStatus(`连接失败，正在重试 (${this.connectionAttempts}/${this.maxConnectionAttempts})...`);
+      setTimeout(() => this.attemptConnection(), 1500);
+    } else {
+      this.updateStatus('无法连接，请确认对方已创建房间');
       if (this.onError) this.onError(err);
     }
   }
@@ -229,7 +252,8 @@ class GomokuNetwork {
   // 连接打开时的处理
   onConnectionOpen() {
     this.connected = true;
-    this.updateStatus('对手已加入');
+    this.connectionAttempts = 0; // 重置重试计数
+    this.updateStatus('已连接');
     this.updateUI();
 
     if (this.opponentInfoEl) {
