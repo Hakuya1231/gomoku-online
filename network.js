@@ -25,16 +25,16 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 强制指定同一个服务器确保互通
+    // 服务器配置 - 不指定 host，让 PeerJS 自动选择最优服务器
     this.peerOptions = {
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
-      debug: 2,
+      debug: 3,  // 详细日志
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stunserver.org:3478' },
+          { urls: 'stun:stun.softjoys.com:3478' }
         ]
       }
     };
@@ -239,14 +239,14 @@ class GomokuNetwork {
 
       this.setupConnection(this.conn);
 
-      // 设置连接超时（10秒）
+      // 设置连接超时（30秒，给 ICE 协商足够时间）
       this.connectionTimeout = setTimeout(() => {
         if (!this.connected && this.conn) {
           console.log('连接超时，尝试重试');
           this.conn.close();
           this.handleConnectionError({ type: 'timeout' });
         }
-      }, 10000);
+      }, 30000);
 
     } catch (err) {
       console.error('连接失败:', err);
