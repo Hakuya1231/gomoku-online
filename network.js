@@ -20,6 +20,16 @@ class GomokuNetwork {
     this.statusEl = null;
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
+
+    // 服务器配置
+    this.peerServers = [
+      { host: '0.peerjs.com', port: 443, secure: true },
+      { host: '1.peerjs.com', port: 443, secure: true },
+      { host: 'peerjs.com', port: 443, secure: true },
+    ];
+    this.currentServerIndex = 0;
+    this.retryCount = 0;
+    this.maxRetries = 3;
   }
 
   // 初始化网络模块
@@ -46,12 +56,7 @@ class GomokuNetwork {
     this.opponentInfoEl = opponentInfoEl;
 
     // 初始化 PeerJS 对象，使用 PeerJS Cloud
-    this.peer = new Peer({
-      host: '0.peerjs.com',
-      port: 443,
-      secure: true,
-      debug: 3 // 调试信息
-    });
+    this.createPeerConnection();
 
     this.peer.on('open', (id) => {
       console.log('PeerJS 已连接，我的ID:', id);
@@ -77,6 +82,81 @@ class GomokuNetwork {
     });
 
     this.updateStatus('正在初始化网络...');
+  }
+
+  // 创建 Peer 连接
+  createPeerConnection() {
+    if (this.peer) {
+      this.peer.destroy();
+      this.peer = null;
+    }
+
+    if (this.currentServerIndex >= this.peerServers.length) {
+      this.currentServerIndex = 0; // 循环回到第一个
+      this.retryCount++;
+      if (this.retryCount > this.maxRetries) {
+        this.updateStatus('无法连接到任何服务器，请检查网络');
+        return;
+      }
+    }
+
+    const serverConfig = this.peerServers[this.currentServerIndex];
+    this.updateStatus(`正在连接服务器 ${serverConfig.host}...`);
+
+    this.peer = new Peer({
+      host: serverConfig.host,
+      port: serverConfig.port,
+      secure: serverConfig.secure,
+      debug: 3,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ]
+      }
+    });
+
+    this.setupPeerEvents();
+  }
+
+  // 设置 Peer 事件监听
+  setupPeerEvents() {
+    this.peer.on('open', (id) => {
+      console.log('PeerJS 已连接，我的ID:', id);
+      this.myPeerId = id;
+      this.updateUI();
+      this.updateStatus('网络已就绪');
+      this.currentServerIndex = 0; // 重置服务器索引
+      this.retryCount = 0; // 重置重试计数
+    });
+
+    this.peer.on('connection', (connection) => {
+      console.log('收到连接请求:', connection.peer);
+      this.handleIncomingConnection(connection);
+    });
+
+    this.peer.on('error', (err) => {
+      console.error('PeerJS 错误:', err);
+      if (this.onError) this.onError(err);
+
+      if (err.type === 'peer-unavailable' || err.type === 'server-error') {
+        // 尝试下一个服务器
+        this.currentServerIndex++;
+        this.updateStatus(`服务器连接失败，尝试下一个...`);
+        setTimeout(() => this.createPeerConnection(), 1000);
+      } else {
+        this.updateStatus('连接错误: ' + err.type);
+      }
+    });
+
+    this.peer.on('disconnected', () => {
+      console.log('PeerJS 断开连接');
+      this.updateStatus('已断开连接，尝试重连...');
+      this.peer.reconnect();
+    });
   }
 
   // 创建房间（作为主机）
