@@ -105,6 +105,9 @@ async function maybeAIMove() {
 function updateGameModeUI() {
   const gameMode = gameModeEl?.value ?? "PVP";
 
+  // 同步设置 state.mode
+  state.mode = gameMode;
+
   // 联机面板显示/隐藏
   if (onlinePanel) {
     onlinePanel.style.display = gameMode === 'ONLINE' ? 'block' : 'none';
@@ -819,10 +822,10 @@ function parseUrlParams() {
   return room ? room.toUpperCase() : null;
 }
 
-// 生成分享链接
-function generateShareLink(roomId) {
+// 生成分享链接（使用完整Peer ID）
+function generateShareLink(peerId) {
   const baseUrl = window.location.href.split('?')[0];
-  return `${baseUrl}?room=${roomId}`;
+  return `${baseUrl}?room=${peerId}`;
 }
 
 // 复制分享链接

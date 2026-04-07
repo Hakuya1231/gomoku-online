@@ -184,20 +184,21 @@ class GomokuNetwork {
 
   // 实际执行创建房间
   doCreateRoom() {
-    this.roomId = this.generateRoomId();
+    // 使用完整Peer ID作为房间标识
+    this.roomId = this.myPeerId;
     this.isHost = true;
     this.remotePeerId = null;
     this.updateUI();
     this.updateStatus('房间已创建，等待对手加入...');
 
-    // 显示房间ID供对方加入
+    // 显示房间ID供对方加入（显示简短版本便于识别）
     if (this.roomIdDisplayEl) {
-      this.roomIdDisplayEl.textContent = this.roomId;
+      this.roomIdDisplayEl.textContent = this.myPeerId.substring(0, 6).toUpperCase();
     }
 
-    // 触发回调
+    // 触发回调，传入完整Peer ID用于生成链接
     if (this.onRoomCreated) {
-      this.onRoomCreated(this.roomId);
+      this.onRoomCreated(this.myPeerId);
     }
 
     return this.roomId;
@@ -420,7 +421,9 @@ class GomokuNetwork {
     }
 
     if (this.roomIdDisplayEl) {
-      this.roomIdDisplayEl.textContent = this.roomId || '-';
+      // 显示简短版本便于识别
+      const displayId = this.roomId ? this.roomId.substring(0, 6).toUpperCase() : '-';
+      this.roomIdDisplayEl.textContent = displayId;
     }
 
     if (this.opponentInfoEl) {
