@@ -22,15 +22,18 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置
-    this.peerServers = [
-      { host: '0.peerjs.com', port: 443, secure: true },
-      { host: '1.peerjs.com', port: 443, secure: true },
-      { host: 'peerjs.com', port: 443, secure: true },
-    ];
-    this.currentServerIndex = 0;
-    this.retryCount = 0;
-    this.maxRetries = 3;
+    // 服务器配置 - 使用 PeerJS 默认服务器，确保所有用户在同一服务器
+    // 不指定 host 让 PeerJS 自动选择
+    this.peerOptions = {
+      debug: 2,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
+    };
   }
 
   // 初始化网络模块
@@ -61,29 +64,6 @@ class GomokuNetwork {
     // 初始化 PeerJS 对象，使用 PeerJS Cloud
     this.createPeerConnection();
 
-    this.peer.on('open', (id) => {
-      console.log('PeerJS 已连接，我的ID:', id);
-      this.myPeerId = id;
-      this.updateUI();
-    });
-
-    this.peer.on('connection', (connection) => {
-      console.log('收到连接请求:', connection.peer);
-      this.handleIncomingConnection(connection);
-    });
-
-    this.peer.on('error', (err) => {
-      console.error('PeerJS 错误:', err);
-      if (this.onError) this.onError(err);
-      this.updateStatus('连接错误: ' + err.type);
-    });
-
-    this.peer.on('disconnected', () => {
-      console.log('PeerJS 断开连接');
-      this.updateStatus('已断开连接，尝试重连...');
-      this.peer.reconnect();
-    });
-
     this.updateStatus('正在初始化网络...');
   }
 
@@ -94,33 +74,9 @@ class GomokuNetwork {
       this.peer = null;
     }
 
-    if (this.currentServerIndex >= this.peerServers.length) {
-      this.currentServerIndex = 0; // 循环回到第一个
-      this.retryCount++;
-      if (this.retryCount > this.maxRetries) {
-        this.updateStatus('无法连接到任何服务器，请检查网络');
-        return;
-      }
-    }
+    this.updateStatus('正在连接服务器...');
 
-    const serverConfig = this.peerServers[this.currentServerIndex];
-    this.updateStatus(`正在连接服务器 ${serverConfig.host}...`);
-
-    this.peer = new Peer({
-      host: serverConfig.host,
-      port: serverConfig.port,
-      secure: serverConfig.secure,
-      debug: 3,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' }
-        ]
-      }
-    });
+    this.peer = new Peer(this.peerOptions);
 
     this.setupPeerEvents();
   }
@@ -132,8 +88,6 @@ class GomokuNetwork {
       this.myPeerId = id;
       this.updateUI();
       this.updateStatus('网络已就绪');
-      this.currentServerIndex = 0; // 重置服务器索引
-      this.retryCount = 0; // 重置重试计数
     });
 
     this.peer.on('connection', (connection) => {
@@ -143,22 +97,32 @@ class GomokuNetwork {
 
     this.peer.on('error', (err) => {
       console.error('PeerJS 错误:', err);
-      if (this.onError) this.onError(err);
 
-      if (err.type === 'peer-unavailable' || err.type === 'server-error') {
-        // 尝试下一个服务器
-        this.currentServerIndex++;
-        this.updateStatus(`服务器连接失败，尝试下一个...`);
-        setTimeout(() => this.createPeerConnection(), 1000);
+      // peer-unavailable 是目标peer不存在
+      if (err.type === 'peer-unavailable') {
+        this.updateStatus('找不到对方，请确认链接正确或等待对方创建房间');
+      } else if (err.type === 'disconnected' || err.type === 'network') {
+        this.updateStatus('网络断开，正在重连...');
+        setTimeout(() => {
+          if (!this.peer.destroyed) {
+            this.peer.reconnect();
+          }
+        }, 1000);
       } else {
         this.updateStatus('连接错误: ' + err.type);
       }
+
+      if (this.onError) this.onError(err);
     });
 
     this.peer.on('disconnected', () => {
       console.log('PeerJS 断开连接');
       this.updateStatus('已断开连接，尝试重连...');
-      this.peer.reconnect();
+      setTimeout(() => {
+        if (!this.peer.destroyed) {
+          this.peer.reconnect();
+        }
+      }, 1000);
     });
   }
 
