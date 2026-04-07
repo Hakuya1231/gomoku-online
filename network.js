@@ -90,7 +90,21 @@ class GomokuNetwork {
       console.log('PeerJS 已连接，我的ID:', id);
       this.myPeerId = id;
       this.updateUI();
-      this.updateStatus('网络已就绪');
+
+      // 已连接成功后不改变状态
+      if (this.connected) {
+        return;
+      }
+
+      // 根据当前状态显示不同文本
+      if (this.isHost) {
+        this.updateStatus('房间已创建，等待对手加入...');
+      } else if (this.remotePeerId) {
+        // 客机正在尝试连接
+        this.updateStatus('正在连接房间...');
+      } else {
+        this.updateStatus('网络已就绪');
+      }
     });
 
     this.peer.on('connection', (connection) => {
@@ -101,9 +115,18 @@ class GomokuNetwork {
     this.peer.on('error', (err) => {
       console.error('PeerJS 错误:', err);
 
-      // peer-unavailable 只在客机尝试连接时重试
-      if (err.type === 'peer-unavailable' && !this.isHost && !this.connected) {
-        this.handleConnectionError(err);
+      // 已连接成功后，忽略 peer-unavailable 错误
+      if (err.type === 'peer-unavailable') {
+        if (this.connected) {
+          console.log('已连接，忽略 peer-unavailable 错误');
+          return;
+        }
+        // 客机尝试连接时重试
+        if (!this.isHost) {
+          this.handleConnectionError(err);
+        } else {
+          this.updateStatus('连接错误: 找不到对方');
+        }
       } else if (err.type === 'disconnected' || err.type === 'network') {
         this.updateStatus('网络断开，正在重连...');
         setTimeout(() => {
@@ -121,7 +144,7 @@ class GomokuNetwork {
       console.log('PeerJS 断开连接');
       this.updateStatus('已断开连接，尝试重连...');
       setTimeout(() => {
-        if (!this.peer.destroyed) {
+        if (this.peer && !this.peer.destroyed) {
           this.peer.reconnect();
         }
       }, 1000);
@@ -218,8 +241,14 @@ class GomokuNetwork {
 
   // 处理连接错误（带重试）
   handleConnectionError(err) {
+    // 已连接成功，忽略错误
+    if (this.connected) {
+      console.log('已连接，忽略连接错误');
+      return;
+    }
+
     const errType = err.type || 'unknown';
-    if (errType === 'peer-unavailable' && this.connectionAttempts < this.maxConnectionAttempts) {
+    if (this.connectionAttempts < this.maxConnectionAttempts) {
       this.updateStatus(`连接失败，正在重试 (${this.connectionAttempts}/${this.maxConnectionAttempts})...`);
       setTimeout(() => this.attemptConnection(), 1500);
     } else {
@@ -296,8 +325,13 @@ class GomokuNetwork {
 
     connection.on('error', (err) => {
       console.error('连接错误:', err);
-      // 连接错误时可能需要重试
-      if (!this.connected && this.isHost === false) {
+      // 已连接成功后忽略错误
+      if (this.connected) {
+        console.log('已连接，忽略连接错误');
+        return;
+      }
+      // 连接错误时可能需要重试（客机模式）
+      if (this.isHost === false) {
         this.handleConnectionError(err);
       } else {
         this.updateStatus('连接错误');
