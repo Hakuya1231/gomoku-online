@@ -100,8 +100,8 @@ class GomokuNetwork {
     this.peer.on('error', (err) => {
       console.error('PeerJS 错误:', err);
 
-      // peer-unavailable 可能是主机还没准备好，尝试重试
-      if (err.type === 'peer-unavailable') {
+      // peer-unavailable 只在客机尝试连接时重试
+      if (err.type === 'peer-unavailable' && !this.isHost && !this.connected) {
         this.handleConnectionError(err);
       } else if (err.type === 'disconnected' || err.type === 'network') {
         this.updateStatus('网络断开，正在重连...');
@@ -217,7 +217,8 @@ class GomokuNetwork {
 
   // 处理连接错误（带重试）
   handleConnectionError(err) {
-    if (err.type === 'peer-unavailable' && this.connectionAttempts < this.maxConnectionAttempts) {
+    const errType = err.type || 'unknown';
+    if (errType === 'peer-unavailable' && this.connectionAttempts < this.maxConnectionAttempts) {
       this.updateStatus(`连接失败，正在重试 (${this.connectionAttempts}/${this.maxConnectionAttempts})...`);
       setTimeout(() => this.attemptConnection(), 1500);
     } else {
@@ -294,8 +295,13 @@ class GomokuNetwork {
 
     connection.on('error', (err) => {
       console.error('连接错误:', err);
-      this.updateStatus('连接错误');
-      if (this.onError) this.onError(err);
+      // 连接错误时可能需要重试
+      if (!this.connected && this.isHost === false) {
+        this.handleConnectionError(err);
+      } else {
+        this.updateStatus('连接错误');
+        if (this.onError) this.onError(err);
+      }
     });
   }
 
