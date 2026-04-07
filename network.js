@@ -11,6 +11,7 @@ class GomokuNetwork {
     this.connectionAttempts = 0;
     this.maxConnectionAttempts = 5;
     this.connectionTimeout = null;
+    this.heartbeatInterval = null;
 
     // 回调函数
     this.onMove = null;
@@ -25,16 +26,29 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 不指定 host，让 PeerJS 自动选择最优服务器
+    // 服务器配置 - 强制使用同一个 PeerJS 服务器
     this.peerOptions = {
-      debug: 3,  // 详细日志
+      host: 'peerjs.com',
+      port: 443,
+      secure: true,
+      debug: 3,
       config: {
         iceServers: [
+          // STUN 服务器
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stunserver.org:3478' },
-          { urls: 'stun:stun.softjoys.com:3478' }
+          // 免费 TURN 服务器（用于 NAT 穿透失败时中继）
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
         ]
       }
     };
@@ -186,12 +200,38 @@ class GomokuNetwork {
       this.roomIdDisplayEl.textContent = this.myPeerId.substring(0, 6).toUpperCase();
     }
 
+    // 保持连接活跃
+    this.startHeartbeat();
+
     // 触发回调，传入完整Peer ID用于生成链接
     if (this.onRoomCreated) {
       this.onRoomCreated(this.myPeerId);
     }
 
     return this.roomId;
+  }
+
+  // 心跳保持连接
+  startHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    this.heartbeatInterval = setInterval(() => {
+      if (this.peer && !this.peer.destroyed && this.isHost) {
+        // 检查连接状态
+        if (!this.peer.open) {
+          console.log('检测到连接断开，尝试重连...');
+          this.peer.reconnect();
+        }
+      }
+    }, 10000);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
   }
 
   // 加入房间（作为客户端）
@@ -458,6 +498,8 @@ class GomokuNetwork {
 
   // 断开连接
   disconnect() {
+    this.stopHeartbeat();
+
     if (this.conn) {
       this.conn.close();
       this.conn = null;

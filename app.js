@@ -819,7 +819,7 @@ if (btnDisconnect) {
 function parseUrlParams() {
   const params = new URLSearchParams(window.location.search);
   const room = params.get('room');
-  return room ? room.toUpperCase() : null;
+  return room; // 不转换大小写，Peer ID 是大小写敏感的
 }
 
 // 生成分享链接（使用完整Peer ID）
