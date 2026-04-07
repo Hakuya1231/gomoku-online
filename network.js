@@ -248,28 +248,42 @@ class GomokuNetwork {
 
     this.conn = connection;
     this.remotePeerId = connection.peer;
+
+    this.updateStatus('对手正在连接...');
+
+    // 设置连接事件处理
     this.setupConnection(connection);
 
+    // 对于传入连接，可能已经 open，需要检查状态
+    if (connection.open) {
+      console.log('传入连接已建立');
+      this.onConnectionOpen();
+    }
+  }
+
+  // 连接打开时的处理
+  onConnectionOpen() {
+    this.connected = true;
     this.updateStatus('对手已加入');
+    this.updateUI();
+
     if (this.opponentInfoEl) {
       this.opponentInfoEl.textContent = '已连接';
     }
+
+    if (this.onConnectionChange) {
+      this.onConnectionChange(true);
+    }
+
+    // 发送问候
+    this.send({ type: 'hello', playerId: this.myPeerId });
   }
 
   // 设置连接事件处理
   setupConnection(connection) {
     connection.on('open', () => {
       console.log('连接已建立');
-      this.connected = true;
-      this.updateStatus('已连接');
-      this.updateUI();
-
-      if (this.onConnectionChange) {
-        this.onConnectionChange(true);
-      }
-
-      // 发送我方信息
-      this.send({ type: 'hello', playerId: this.myPeerId });
+      this.onConnectionOpen();
     });
 
     connection.on('data', (data) => {
