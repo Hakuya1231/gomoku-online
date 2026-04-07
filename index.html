@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>五子棋 Gomoku</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header">
+        <div class="brand">
+          <div class="logo" aria-hidden="true"></div>
+          <div>
+            <div class="title">五子棋</div>
+            <div class="subtitle">本地双人对战 · 15×15</div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <div class="status" id="status">加载中…</div>
+          <div class="buttons">
+            <button class="btn" id="btnUndo" type="button">悔棋</button>
+            <button class="btn" id="btnRestart" type="button">重开</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="boardCard">
+          <div class="boardWrap">
+            <canvas id="board" width="720" height="720" aria-label="五子棋棋盘"></canvas>
+          </div>
+          <div class="hint">
+            提示：点击棋盘落子。黑先。连成五子即胜。你也可以用键盘 <kbd>Z</kbd> 悔棋，<kbd>R</kbd> 重开。
+          </div>
+        </section>
+
+        <aside class="side">
+          <section class="panel">
+            <div class="panelTitle">设置</div>
+            <div class="panelBody">
+              <label class="row">
+                <span>对战</span>
+                <select id="gameMode">
+                  <option value="PVP" selected>双人</option>
+                  <option value="AI">人机</option>
+                  <option value="ONLINE">在线联机</option>
+                </select>
+              </label>
+              <label class="row">
+                <span>你执</span>
+                <select id="humanSide">
+                  <option value="B" selected>黑</option>
+                  <option value="W">白</option>
+                </select>
+              </label>
+              <label class="row">
+                <span>难度</span>
+                <select id="aiLevel">
+                  <option value="1" selected>简单</option>
+                  <option value="2">中等</option>
+                  <option value="3">困难</option>
+                </select>
+              </label>
+              <label class="row">
+                <span>先手</span>
+                <select id="firstPlayer">
+                  <option value="B" selected>黑先</option>
+                  <option value="W">白先</option>
+                </select>
+              </label>
+              <label class="row">
+                <span>棋盘大小</span>
+                <select id="boardSize">
+                  <option value="15" selected>15 × 15</option>
+                  <option value="19">19 × 19</option>
+                </select>
+              </label>
+              <div class="row">
+                <span>坐标</span>
+                <label class="switch">
+                  <input id="toggleCoords" type="checkbox" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="row">
+                <span>提示线</span>
+                <label class="switch">
+                  <input id="toggleHints" type="checkbox" checked />
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="onlinePanel" style="display: none;">
+            <div class="panelTitle">联机对战</div>
+            <div class="panelBody">
+              <div class="row">
+                <span>角色</span>
+                <select id="onlineRole">
+                  <option value="create">创建房间</option>
+                  <option value="join">加入房间</option>
+                </select>
+              </div>
+              <div id="roomIdSection" style="display: none;">
+                <div class="row">
+                  <span>房间号</span>
+                  <input type="text" id="roomIdInput" placeholder="输入房间号" style="width: 120px; padding: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.22); color: var(--text);">
+                </div>
+              </div>
+              <div class="row" style="justify-content: center; margin-top: 10px;">
+                <button class="btn" id="btnConnect" type="button" style="flex: 1;">连接</button>
+                <button class="btn" id="btnDisconnect" type="button" style="flex: 1; display: none;">断开</button>
+              </div>
+              <div class="row" style="flex-direction: column; align-items: flex-start; gap: 5px; margin-top: 10px;">
+                <div style="font-size: 12px; color: var(--muted);">状态: <span id="connectionStatus">未连接</span></div>
+                <div style="font-size: 12px; color: var(--muted);">房间: <span id="roomIdDisplay">-</span></div>
+                <div style="font-size: 12px; color: var(--muted);">对手: <span id="opponentInfo">-</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panelTitle">对局信息</div>
+            <div class="panelBody">
+              <div class="kv">
+                <div class="k">步数</div>
+                <div class="v" id="moveCount">0</div>
+              </div>
+              <div class="kv">
+                <div class="k">上一步</div>
+                <div class="v mono" id="lastMove">-</div>
+              </div>
+              <div class="kv">
+                <div class="k">胜者</div>
+                <div class="v" id="winner">-</div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="footer">
+        <span>纯前端 · 支持本地/联机对战</span>
+        <span class="dot">•</span>
+        <span>Canvas 渲染</span>
+        <span class="dot">•</span>
+        <span>基于 PeerJS Cloud 联机</span>
+      </footer>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script src="./network.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
