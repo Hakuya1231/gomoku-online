@@ -151,9 +151,11 @@ function resetGame({ size = state.size, first = state.first } = {}) {
     if (state.network.role === 'host') {
       state.human = 'B'; // 主机执黑
       state.first = 'B'; // 黑先
+      if (humanSideEl) humanSideEl.value = 'B';
     } else if (state.network.role === 'guest') {
       state.human = 'W'; // 客机执白
       state.first = 'B'; // 黑先（主机先走）
+      if (humanSideEl) humanSideEl.value = 'W';
     }
   } else {
     // 非联机模式，正常重置
