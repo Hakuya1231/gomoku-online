@@ -19,10 +19,11 @@ const aiLevelEl = $("aiLevel");
 
 // 联机UI元素
 const onlinePanel = $("onlinePanel");
-const onlineRoleEl = $("onlineRole");
-const roomIdSection = $("roomIdSection");
-const roomIdInput = $("roomIdInput");
-const btnConnect = $("btnConnect");
+const linkSection = $("linkSection");
+const shareLinkInput = $("shareLinkInput");
+const btnCopyLink = $("btnCopyLink");
+const connectSection = $("connectSection");
+const btnCreateRoom = $("btnCreateRoom");
 const btnDisconnect = $("btnDisconnect");
 const connectionStatusEl = $("connectionStatus");
 const roomIdDisplayEl = $("roomIdDisplay");
@@ -793,15 +794,15 @@ toggleCoordsEl.addEventListener("change", () => { state.showCoords = toggleCoord
 toggleHintsEl.addEventListener("change", () => { state.showHints = toggleHintsEl.checked; draw(); });
 
 // 联机面板事件
-if (onlineRoleEl) {
-  onlineRoleEl.addEventListener("change", () => {
-    roomIdSection.style.display = onlineRoleEl.value === 'join' ? 'flex' : 'none';
+if (btnCreateRoom) {
+  btnCreateRoom.addEventListener("click", () => {
+    handleCreateRoom();
   });
 }
 
-if (btnConnect) {
-  btnConnect.addEventListener("click", () => {
-    handleConnectClick();
+if (btnCopyLink) {
+  btnCopyLink.addEventListener("click", () => {
+    copyShareLink();
   });
 }
 
@@ -809,6 +810,76 @@ if (btnDisconnect) {
   btnDisconnect.addEventListener("click", () => {
     handleDisconnectClick();
   });
+}
+
+// 解析URL参数
+function parseUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const room = params.get('room');
+  return room ? room.toUpperCase() : null;
+}
+
+// 生成分享链接
+function generateShareLink(roomId) {
+  const baseUrl = window.location.href.split('?')[0];
+  return `${baseUrl}?room=${roomId}`;
+}
+
+// 复制分享链接
+function copyShareLink() {
+  const link = shareLinkInput.value;
+  if (!link) return;
+
+  navigator.clipboard.writeText(link).then(() => {
+    // 复制成功反馈
+    btnCopyLink.textContent = '已复制!';
+    setTimeout(() => {
+      btnCopyLink.textContent = '复制';
+    }, 2000);
+  }).catch(err => {
+    console.error('复制失败:', err);
+    alert('复制失败，请手动复制链接');
+  });
+}
+
+// 自动加入房间（从URL参数）
+function autoJoinRoom(roomId) {
+  if (!window.gomokuNetwork) {
+    console.error('网络模块未加载');
+    return;
+  }
+
+  // 切换到联机模式
+  if (gameModeEl.value !== 'ONLINE') {
+    gameModeEl.value = 'ONLINE';
+    updateGameModeUI();
+  }
+
+  // 隐藏创建房间按钮，显示等待状态
+  if (connectSection) connectSection.style.display = 'none';
+
+  // 等待PeerJS初始化完成后加入
+  const tryJoin = () => {
+    if (window.gomokuNetwork.myPeerId) {
+      window.gomokuNetwork.joinRoom(roomId);
+      state.network.role = 'guest';
+      updateUI();
+    } else {
+      setTimeout(tryJoin, 200);
+    }
+  };
+  tryJoin();
+}
+
+// 处理创建房间
+function handleCreateRoom() {
+  if (!window.gomokuNetwork) {
+    alert('网络模块未加载');
+    return;
+  }
+
+  // 调用创建房间（结果通过onRoomCreated回调处理）
+  window.gomokuNetwork.createRoom();
 }
 
 window.addEventListener("keydown", (e) => {
@@ -855,7 +926,6 @@ function initNetwork() {
         state.network.roomId = window.gomokuNetwork.getRoomId();
 
         // 更新UI
-        if (btnConnect) btnConnect.style.display = 'none';
         if (btnDisconnect) btnDisconnect.style.display = 'block';
         if (roomIdDisplayEl) roomIdDisplayEl.textContent = state.network.roomId;
 
@@ -863,9 +933,27 @@ function initNetwork() {
         resetGame();
       } else {
         // 断开连接
-        if (btnConnect) btnConnect.style.display = 'block';
         if (btnDisconnect) btnDisconnect.style.display = 'none';
+        // 显示创建房间按钮（主机）或提示（客机）
+        if (state.network.role === 'host') {
+          linkSection.style.display = 'block';
+        } else {
+          connectSection.style.display = 'block';
+        }
       }
+    },
+    onRoomCreated: (roomId) => {
+      // 房间创建完成
+      state.network.roomId = roomId;
+      state.network.role = 'host';
+
+      // 生成并显示分享链接
+      const shareLink = generateShareLink(roomId);
+      shareLinkInput.value = shareLink;
+      linkSection.style.display = 'block';
+      connectSection.style.display = 'none';
+
+      updateUI();
     },
     onError: (err) => {
       console.error('网络错误:', err);
@@ -879,35 +967,6 @@ function initNetwork() {
   console.log('网络模块初始化完成');
 }
 
-// 处理连接按钮点击
-function handleConnectClick() {
-  if (!window.gomokuNetwork) {
-    alert('网络模块未加载');
-    return;
-  }
-
-  const role = onlineRoleEl.value;
-
-  if (role === 'create') {
-    // 创建房间
-    const roomId = window.gomokuNetwork.createRoom();
-    if (roomId) {
-      state.network.roomId = roomId;
-      state.network.role = 'host';
-      roomIdDisplayEl.textContent = roomId;
-      alert(`房间已创建！房间号: ${roomId}\n请将房间号分享给对手。`);
-    }
-  } else if (role === 'join') {
-    // 加入房间
-    const roomId = roomIdInput.value.trim();
-    if (!roomId) {
-      alert('请输入房间号');
-      return;
-    }
-    window.gomokuNetwork.joinRoom(roomId);
-  }
-}
-
 // 处理断开连接按钮点击
 function handleDisconnectClick() {
   if (!window.gomokuNetwork) return;
@@ -917,10 +976,16 @@ function handleDisconnectClick() {
   state.network.role = null;
   state.network.roomId = null;
 
-  if (btnConnect) btnConnect.style.display = 'block';
   if (btnDisconnect) btnDisconnect.style.display = 'none';
   if (roomIdDisplayEl) roomIdDisplayEl.textContent = '-';
   if (opponentInfoEl) opponentInfoEl.textContent = '-';
+  if (linkSection) linkSection.style.display = 'none';
+  if (connectSection) connectSection.style.display = 'block';
+
+  // 清除URL参数
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
 
   // 切换回本地模式
   if (gameModeEl.value === 'ONLINE') {
@@ -945,8 +1010,16 @@ function init() {
   // 更新游戏模式UI
   updateGameModeUI();
 
-  // 重置游戏
-  resetGame({ size: 15, first: "B" });
+  // 检测URL参数，自动加入房间
+  const roomId = parseUrlParams();
+  if (roomId) {
+    // 有房间参数，自动切换到联机模式并加入
+    console.log('检测到房间参数:', roomId);
+    autoJoinRoom(roomId);
+  } else {
+    // 正常初始化
+    resetGame({ size: 15, first: "B" });
+  }
 }
 
 init();

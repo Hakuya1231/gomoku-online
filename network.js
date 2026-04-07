@@ -15,6 +15,7 @@ class GomokuNetwork {
     this.onReset = null;
     this.onConnectionChange = null;
     this.onError = null;
+    this.onRoomCreated = null; // 房间创建完成回调
 
     // UI 元素引用（将在init中设置）
     this.statusEl = null;
@@ -40,6 +41,7 @@ class GomokuNetwork {
       onReset,
       onConnectionChange,
       onError,
+      onRoomCreated,
       statusEl,
       roomIdDisplayEl,
       opponentInfoEl
@@ -50,6 +52,7 @@ class GomokuNetwork {
     this.onReset = onReset;
     this.onConnectionChange = onConnectionChange;
     this.onError = onError;
+    this.onRoomCreated = onRoomCreated;
 
     this.statusEl = statusEl;
     this.roomIdDisplayEl = roomIdDisplayEl;
@@ -161,12 +164,26 @@ class GomokuNetwork {
 
   // 创建房间（作为主机）
   createRoom() {
-    if (!this.peer || !this.peer.id) {
-      this.updateStatus('等待 PeerJS 初始化...');
-      setTimeout(() => this.createRoom(), 500);
-      return;
+    // 如果还没有Peer ID，等待初始化完成
+    if (!this.peer || !this.myPeerId) {
+      this.updateStatus('等待网络初始化...');
+      // 返回一个Promise风格的回调
+      const checkReady = () => {
+        if (this.myPeerId) {
+          this.doCreateRoom();
+        } else {
+          setTimeout(checkReady, 200);
+        }
+      };
+      checkReady();
+      return null; // 立即返回null，稍后通过回调通知
     }
 
+    return this.doCreateRoom();
+  }
+
+  // 实际执行创建房间
+  doCreateRoom() {
     this.roomId = this.generateRoomId();
     this.isHost = true;
     this.remotePeerId = null;
@@ -176,6 +193,11 @@ class GomokuNetwork {
     // 显示房间ID供对方加入
     if (this.roomIdDisplayEl) {
       this.roomIdDisplayEl.textContent = this.roomId;
+    }
+
+    // 触发回调
+    if (this.onRoomCreated) {
+      this.onRoomCreated(this.roomId);
     }
 
     return this.roomId;

@@ -97,28 +97,29 @@
           <section class="panel" id="onlinePanel" style="display: none;">
             <div class="panelTitle">联机对战</div>
             <div class="panelBody">
-              <div class="row">
-                <span>角色</span>
-                <select id="onlineRole">
-                  <option value="create">创建房间</option>
-                  <option value="join">加入房间</option>
-                </select>
-              </div>
-              <div id="roomIdSection" style="display: none;">
-                <div class="row">
-                  <span>房间号</span>
-                  <input type="text" id="roomIdInput" placeholder="输入房间号" style="width: 120px; padding: 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.22); color: var(--text);">
+              <div id="linkSection" style="display: none;">
+                <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">分享链接给对手：</div>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <input type="text" id="shareLinkInput" readonly style="flex: 1; font-size: 11px; padding: 6px 8px;">
+                  <button class="btn" id="btnCopyLink" type="button" style="padding: 6px 10px;">复制</button>
                 </div>
               </div>
-              <div class="row" style="justify-content: center; margin-top: 10px;">
-                <button class="btn" id="btnConnect" type="button" style="flex: 1;">连接</button>
-                <button class="btn" id="btnDisconnect" type="button" style="flex: 1; display: none;">断开</button>
+              <div id="connectSection">
+                <button class="btn" id="btnCreateRoom" type="button" style="width: 100%;">创建房间</button>
               </div>
-              <div class="row" style="flex-direction: column; align-items: flex-start; gap: 5px; margin-top: 10px;">
-                <div style="font-size: 12px; color: var(--muted);">状态: <span id="connectionStatus">未连接</span></div>
-                <div style="font-size: 12px; color: var(--muted);">房间: <span id="roomIdDisplay">-</span></div>
-                <div style="font-size: 12px; color: var(--muted);">对手: <span id="opponentInfo">-</span></div>
+              <div class="row" style="margin-top: 12px;">
+                <span style="font-size: 12px;">状态:</span>
+                <span id="connectionStatus" style="font-size: 12px; color: var(--accent);">未连接</span>
               </div>
+              <div class="row">
+                <span style="font-size: 12px;">房间:</span>
+                <span id="roomIdDisplay" style="font-size: 12px; color: var(--text); font-weight: 600;">-</span>
+              </div>
+              <div class="row">
+                <span style="font-size: 12px;">对手:</span>
+                <span id="opponentInfo" style="font-size: 12px; color: var(--text); font-weight: 600;">-</span>
+              </div>
+              <button class="btn" id="btnDisconnect" type="button" style="width: 100%; margin-top: 12px; display: none;">断开连接</button>
             </div>
           </section>
 
