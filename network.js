@@ -26,25 +26,39 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 使用 PeerJS 默认服务器
+    // 服务器配置 - 使用 PeerJS 默认配置 + 多个备用 TURN 服务器
     this.peerOptions = {
       debug: 3,
       config: {
         iceServers: [
-          // STUN 服务器
+          // Google STUN
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          // 免费 TURN 服务器（用于 NAT 穿透失败时中继）
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          // Cloudflare STUN
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          // 免费 TURN 服务器 (NAT 穿透失败时中继)
           {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
+            urls: 'turn:global.relay.metered.ca:80',
+            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
+            credential: 'Fw3RqIqV2N0lVkQr'
           },
           {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
+            urls: 'turn:global.relay.metered.ca:80?transport=tcp',
+            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
+            credential: 'Fw3RqIqV2N0lVkQr'
+          },
+          {
+            urls: 'turn:global.relay.metered.ca:443',
+            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
+            credential: 'Fw3RqIqV2N0lVkQr'
+          },
+          {
+            urls: 'turns:global.relay.metered.ca:443?transport=tcp',
+            username: 'e6505719-d1d9-45c8-bfc8-ddc538ff4f0c',
+            credential: 'Fw3RqIqV2N0lVkQr'
           }
         ]
       }
