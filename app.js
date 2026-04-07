@@ -824,10 +824,10 @@ function parseUrlParams() {
   return room; // 不转换大小写，Peer ID 是大小写敏感的
 }
 
-// 生成分享链接（使用完整Peer ID）
-function generateShareLink(peerId) {
+// 生成分享链接（使用房间号）
+function generateShareLink(roomId) {
   const baseUrl = window.location.href.split('?')[0];
-  return `${baseUrl}?room=${peerId}`;
+  return `${baseUrl}?room=${roomId}`;
 }
 
 // 复制分享链接
@@ -862,27 +862,11 @@ function autoJoinRoom(roomId) {
 
   // 隐藏创建房间按钮，显示等待状态
   if (connectSection) connectSection.style.display = 'none';
+  if (connectionStatusEl) connectionStatusEl.textContent = '正在连接...';
 
-  // 等待 PeerJS 完全初始化后再加入
-  const tryJoin = () => {
-    if (window.gomokuNetwork.myPeerId && window.gomokuNetwork.peer.open) {
-      // 网络已就绪，等待更长时间确保主机已准备好（3秒）
-      connectionStatusEl.textContent = '等待主机...';
-      setTimeout(() => {
-        window.gomokuNetwork.joinRoom(roomId);
-        state.network.role = 'guest';
-        updateUI();
-      }, 3000);
-    } else if (window.gomokuNetwork.peer && !window.gomokuNetwork.peer.destroyed) {
-      // 网络还在初始化，继续等待
-      connectionStatusEl.textContent = '网络初始化中...';
-      setTimeout(tryJoin, 500);
-    } else {
-      // 网络初始化失败，显示错误
-      connectionStatusEl.textContent = '网络初始化失败';
-    }
-  };
-  tryJoin();
+  // 直接加入房间
+  window.gomokuNetwork.joinRoom(roomId);
+  state.network.role = 'guest';
 }
 
 // 处理创建房间
