@@ -10,6 +10,7 @@ class GomokuNetwork {
     this.myPeerId = null;
     this.connectionAttempts = 0;
     this.maxConnectionAttempts = 5;
+    this.connectionTimeout = null;
 
     // 回调函数
     this.onMove = null;
@@ -220,10 +221,14 @@ class GomokuNetwork {
     this.connectionAttempts = (this.connectionAttempts || 0) + 1;
     this.maxConnectionAttempts = 5;
 
-    // 清理之前的连接
+    // 清理之前的连接和超时
     if (this.conn) {
       this.conn.close();
       this.conn = null;
+    }
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
     }
 
     try {
@@ -233,6 +238,16 @@ class GomokuNetwork {
       });
 
       this.setupConnection(this.conn);
+
+      // 设置连接超时（10秒）
+      this.connectionTimeout = setTimeout(() => {
+        if (!this.connected && this.conn) {
+          console.log('连接超时，尝试重试');
+          this.conn.close();
+          this.handleConnectionError({ type: 'timeout' });
+        }
+      }, 10000);
+
     } catch (err) {
       console.error('连接失败:', err);
       this.handleConnectionError(err);
@@ -273,6 +288,16 @@ class GomokuNetwork {
     // 设置连接事件处理
     this.setupConnection(connection);
 
+    // 设置连接超时（15秒，主机端等待客机完成ICE）
+    this.connectionTimeout = setTimeout(() => {
+      if (!this.connected && this.conn) {
+        console.log('主机端连接超时');
+        this.conn.close();
+        this.conn = null;
+        this.updateStatus('连接超时，请重试');
+      }
+    }, 15000);
+
     // 对于传入连接，可能已经 open，需要检查状态
     if (connection.open) {
       console.log('传入连接已建立');
@@ -282,6 +307,12 @@ class GomokuNetwork {
 
   // 连接打开时的处理
   onConnectionOpen() {
+    // 清除连接超时
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+
     this.connected = true;
     this.connectionAttempts = 0; // 重置重试计数
     this.updateStatus('已连接');
@@ -444,10 +475,7 @@ class GomokuNetwork {
 
   // 更新UI状态
   updateUI() {
-    if (this.statusEl) {
-      const status = this.connected ? '已连接' : '未连接';
-      this.statusEl.textContent = status;
-    }
+    // statusEl 由 updateStatus() 统一管理，这里只更新其他元素
 
     if (this.roomIdDisplayEl) {
       // 显示简短版本便于识别
