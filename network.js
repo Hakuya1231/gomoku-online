@@ -24,15 +24,16 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 使用 PeerJS 默认服务器，确保所有用户在同一服务器
-    // 不指定 host 让 PeerJS 自动选择
+    // 服务器配置 - 强制指定同一个服务器确保互通
     this.peerOptions = {
+      host: '0.peerjs.com',
+      port: 443,
+      secure: true,
       debug: 2,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' }
+          { urls: 'stun:stun1.l.google.com:19302' }
         ]
       }
     };

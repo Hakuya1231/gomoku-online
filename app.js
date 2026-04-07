@@ -861,14 +861,21 @@ function autoJoinRoom(roomId) {
   // 隐藏创建房间按钮，显示等待状态
   if (connectSection) connectSection.style.display = 'none';
 
-  // 等待PeerJS初始化完成后加入
+  // 等待 PeerJS 初始化完成后再加入（需要网络就绪）
   const tryJoin = () => {
     if (window.gomokuNetwork.myPeerId) {
-      window.gomokuNetwork.joinRoom(roomId);
-      state.network.role = 'guest';
-      updateUI();
+      // 等待一小段时间确保连接稳定后再尝试加入
+      setTimeout(() => {
+        window.gomokuNetwork.joinRoom(roomId);
+        state.network.role = 'guest';
+        updateUI();
+      }, 500);
+    } else if (window.gomokuNetwork.peer && !window.gomokuNetwork.peer.open) {
+      // 网络还在初始化，继续等待
+      setTimeout(tryJoin, 300);
     } else {
-      setTimeout(tryJoin, 200);
+      // 网络初始化失败，显示错误
+      connectionStatusEl.textContent = '网络初始化失败';
     }
   };
   tryJoin();
