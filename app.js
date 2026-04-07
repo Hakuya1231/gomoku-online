@@ -140,8 +140,8 @@ function updateGameModeUI() {
 function resetGame({ size = state.size, first = state.first } = {}) {
   const gameMode = gameModeEl?.value ?? "PVP";
 
-  // 如果是联机模式，棋盘设置由主机决定
-  if (gameMode === 'ONLINE' && state.network.connected) {
+  // 如果是联机模式，根据角色决定执子
+  if (gameMode === 'ONLINE' && state.network.role) {
     // 在网络模式下，保持当前网络状态
     const networkState = state.network;
     state = createState(size, first);
