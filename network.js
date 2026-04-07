@@ -26,11 +26,8 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 强制使用同一个 PeerJS 服务器
+    // 服务器配置 - 使用 PeerJS 默认服务器
     this.peerOptions = {
-      host: 'peerjs.com',
-      port: 443,
-      secure: true,
       debug: 3,
       config: {
         iceServers: [
