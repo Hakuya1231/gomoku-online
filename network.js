@@ -26,8 +26,7 @@ class GomokuNetwork {
     this.roomIdDisplayEl = null;
     this.opponentInfoEl = null;
 
-    // 服务器配置 - 使用 PeerJS 默认配置 + TURN 服务器
-    // API Key: 999e07ac7e7ea34c713f2c6fd80a9e7809ec
+    // 服务器配置 - PeerJS + 免费 TURN 服务器
     this.peerOptions = {
       debug: 3,
       config: {
@@ -35,27 +34,21 @@ class GomokuNetwork {
           // STUN 服务器
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          // Metered TURN 服务器 (API Key 作为凭据)
+          // OpenRelay 免费 TURN 服务器 (公开凭据)
           {
-            urls: 'turn:global.relay.metered.ca:80',
-            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
-            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
           },
           {
-            urls: 'turn:global.relay.metered.ca:80?transport=tcp',
-            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
-            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
           },
           {
-            urls: 'turns:global.relay.metered.ca:443',
-            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
-            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
-          },
-          {
-            urls: 'turns:global.relay.metered.ca:443?transport=tcp',
-            username: '999e07ac7e7ea34c713f2c6fd80a9e7809ec',
-            credential: '999e07ac7e7ea34c713f2c6fd80a9e7809ec'
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
           }
         ]
       }
@@ -282,7 +275,8 @@ class GomokuNetwork {
     try {
       this.conn = this.peer.connect(this.remotePeerId, {
         reliable: true,
-        serialization: 'json'
+        serialization: 'json',
+        config: this.peerOptions.config
       });
 
       this.setupConnection(this.conn);
