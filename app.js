@@ -156,6 +156,10 @@ function resetGame({ size = state.size, first = state.first } = {}) {
       state.human = 'W'; // 客机执白
       state.first = 'B'; // 黑先（主机先走）
       if (humanSideEl) humanSideEl.value = 'W';
+    } else if (state.network.role === 'spectator') {
+      // 观战者不执子，可以看双方的棋
+      state.human = null;
+      state.first = 'B';
     }
   } else {
     // 非联机模式，正常重置
@@ -421,6 +425,10 @@ function place(r, c) {
       alert('未连接到对手，无法落子');
       return;
     }
+    // 观战者不能落子
+    if (state.network.role === 'spectator') {
+      return;
+    }
     // 检查是否是本地玩家的回合
     if (state.turn !== state.human) {
       return; // 不是本地回合，不能落子
@@ -447,6 +455,10 @@ function undo() {
   if (state.mode === "ONLINE") {
     if (!state.network.connected) {
       alert('未连接到对手，无法悔棋');
+      return;
+    }
+    // 观战者不能悔棋
+    if (state.network.role === 'spectator') {
       return;
     }
   }
@@ -504,7 +516,7 @@ function updateUI() {
 
   // 添加联机状态信息
   if (state.mode === "ONLINE") {
-    const roleText = state.network.role === 'host' ? '主机' : (state.network.role === 'guest' ? '客机' : '');
+    const roleText = state.network.role === 'host' ? '主机' : (state.network.role === 'guest' ? '客机' : (state.network.role === 'spectator' ? '观战者' : ''));
     const connText = state.network.connected ? '已连接' : '未连接';
     statusText += ` | 联机${roleText ? `(${roleText})` : ''} - ${connText}`;
   }
@@ -864,9 +876,8 @@ function autoJoinRoom(roomId) {
   if (connectSection) connectSection.style.display = 'none';
   if (connectionStatusEl) connectionStatusEl.textContent = '正在连接...';
 
-  // 直接加入房间
+  // 加入房间（角色由 gomokuNetwork 决定并回调设置）
   window.gomokuNetwork.joinRoom(roomId);
-  state.network.role = 'guest';
 }
 
 // 处理创建房间
@@ -921,15 +932,22 @@ function initNetwork() {
       if (connected) {
         // 连接成功，更新角色和连接状态
         state.network.connected = true;
-        state.network.role = window.gomokuNetwork.isHost ? 'host' : 'guest';
+        state.network.role = window.gomokuNetwork.role; // 'host' | 'guest' | 'spectator'
         state.network.roomId = window.gomokuNetwork.getRoomId();
 
         // 更新UI
         if (btnDisconnect) btnDisconnect.style.display = 'block';
         if (roomIdDisplayEl) roomIdDisplayEl.textContent = state.network.roomId;
 
-        // 重置游戏（联机模式）
-        resetGame();
+        // 观战者不重置游戏（只观看）
+        if (state.network.role !== 'spectator') {
+          // 重置游戏（联机模式）
+          resetGame();
+        } else {
+          // 观战者模式提示
+          statusEl.textContent = '观战模式 - 只能观看对局';
+          updateUI();
+        }
       } else {
         // 断开连接
         state.network.connected = false;

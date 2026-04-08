@@ -8,6 +8,7 @@ class GomokuNetwork {
     this.myId = null;
     this.roomRef = null;
     this.messageListener = null;
+    this.role = null; // 'host' | 'guest' | 'spectator'
 
     // 回调函数
     this.onMove = null;
@@ -154,7 +155,7 @@ class GomokuNetwork {
     });
   }
 
-  // 加入房间（作为客机）
+  // 加入房间（作为客机或观战者）
   joinRoom(roomId) {
     if (!this.database) {
       this.updateStatus('网络未就绪');
@@ -172,7 +173,7 @@ class GomokuNetwork {
 
     this.updateStatus('正在连接房间...');
 
-    // 检查房间是否存在
+    // 检查房间是否存在及状态
     this.roomRef.once('value').then((snapshot) => {
       const roomData = snapshot.val();
       if (!roomData || !roomData.host) {
@@ -181,13 +182,29 @@ class GomokuNetwork {
         return;
       }
 
-      // 写入客机信息
-      return this.roomRef.child('guest').set({
-        id: this.myId,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
-      });
+      // 检查是否已有客机
+      if (roomData.guest) {
+        // 房间已满，加入为观战者
+        return this.joinAsSpectator();
+      } else {
+        // 作为客机加入
+        return this.joinAsGuest();
+      }
+    }).catch(err => {
+      console.error('加入房间失败:', err);
+      this.updateStatus('连接失败');
+      if (this.onError) this.onError(err);
+    });
+  }
+
+  // 作为客机加入
+  joinAsGuest() {
+    return this.roomRef.child('guest').set({
+      id: this.myId,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
     }).then(() => {
-      console.log('已加入房间:', this.roomId);
+      console.log('已作为客机加入房间:', this.roomId);
+      this.role = 'guest';
       this.connected = true;
       this.updateStatus('已连接');
       this.updateUI();
@@ -200,25 +217,54 @@ class GomokuNetwork {
         this.onConnectionChange(true);
       }
 
-      // 开始监听主机消息
+      // 监听主机消息
       this.listenForMessages('host');
-    }).catch(err => {
-      console.error('加入房间失败:', err);
-      this.updateStatus('连接失败');
-      if (this.onError) this.onError(err);
+    });
+  }
+
+  // 作为观战者加入
+  joinAsSpectator() {
+    const spectatorRef = this.roomRef.child('spectators').push();
+    return spectatorRef.set({
+      id: this.myId,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+      console.log('已作为观战者加入房间:', this.roomId);
+      this.role = 'spectator';
+      this.connected = true;
+      this.updateStatus('观战模式');
+      this.updateUI();
+
+      if (this.opponentInfoEl) {
+        this.opponentInfoEl.textContent = '观战中';
+      }
+
+      if (this.onConnectionChange) {
+        this.onConnectionChange(true);
+      }
+
+      // 监听双方消息
+      this.listenForMessages('host');
+      this.listenForMessages('guest');
     });
   }
 
   // 监听消息
   listenForMessages(fromRole) {
     const messagesRef = this.roomRef.child('messages/' + fromRole);
-    this.messageListener = messagesRef.on('child_added', (snapshot) => {
+    const listener = messagesRef.on('child_added', (snapshot) => {
       const message = snapshot.val();
       if (message) {
         console.log('收到消息:', message);
         this.handleMessage(message);
       }
     });
+
+    // 保存监听器引用以便清理
+    if (!this.messageListeners) {
+      this.messageListeners = [];
+    }
+    this.messageListeners.push({ ref: messagesRef, listener });
   }
 
   // 处理收到的消息
@@ -302,15 +348,21 @@ class GomokuNetwork {
 
   // 断开连接
   disconnect() {
-    if (this.messageListener) {
-      this.roomRef.off('child_added', this.messageListener);
-      this.messageListener = null;
+    // 清理所有消息监听器
+    if (this.messageListeners) {
+      this.messageListeners.forEach(({ ref, listener }) => {
+        ref.off('child_added', listener);
+      });
+      this.messageListeners = [];
     }
 
     if (this.roomRef) {
       if (this.isHost) {
         // 主机删除整个房间
         this.roomRef.remove();
+      } else if (this.role === 'spectator') {
+        // 观战者删除自己的信息
+        // 暂时不实现，观战者直接离开不影响房间
       } else {
         // 客机删除自己的信息
         this.roomRef.child('guest').remove();
@@ -318,6 +370,7 @@ class GomokuNetwork {
     }
 
     this.connected = false;
+    this.role = null;
     this.roomId = null;
     this.roomRef = null;
     this.updateUI();
