@@ -108,6 +108,7 @@ class GomokuNetwork {
       messages: {}
     }).then(() => {
       console.log('房间已创建:', this.roomId);
+      this.role = 'host';
       this.updateStatus('房间已创建，等待对手加入...');
       this.updateUI();
 
