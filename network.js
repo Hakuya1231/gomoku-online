@@ -177,7 +177,14 @@ class GomokuNetwork {
       return;
     }
 
-    this.roomId = roomId.trim().toUpperCase();
+    // 清理房间号，只保留字母数字
+    let cleanRoomId = roomId.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (cleanRoomId.length < 4) {
+      if (this.onError) this.onError('房间号格式无效');
+      return;
+    }
+
+    this.roomId = cleanRoomId;
     this.isHost = false;
     this.roomRef = this.database.ref('rooms/' + this.roomId);
 

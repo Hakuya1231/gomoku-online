@@ -840,8 +840,26 @@ if (btnDisconnect) {
 // 解析URL参数
 function parseUrlParams() {
   const params = new URLSearchParams(window.location.search);
-  const room = params.get('room');
-  return room; // 不转换大小写，Peer ID 是大小写敏感的
+  let room = params.get('room') || params.get('ROOM');
+  if (!room) return null;
+
+  // 如果 room 参数包含完整 URL，提取其中的房间号
+  if (room.includes('://') || room.includes('?')) {
+    // 尝试从 URL 中提取 room 参数
+    try {
+      const url = new URL(room.startsWith('http') ? room : 'https://' + room);
+      const innerRoom = url.searchParams.get('room') || url.searchParams.get('ROOM');
+      if (innerRoom) room = innerRoom;
+    } catch (e) {
+      // 解析失败，尝试提取最后一个路径段或参数
+      const match = room.match(/room=([A-Za-z0-9]+)/i);
+      if (match) room = match[1];
+    }
+  }
+
+  // 只保留有效的房间号字符（字母数字）
+  room = room.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return room.length >= 4 ? room : null;
 }
 
 // 生成分享链接（使用房间号）
