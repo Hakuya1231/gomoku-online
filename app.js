@@ -923,6 +923,31 @@ function initNetwork() {
         resetGame({ size, first });
       }
     },
+    onBoardStateRequest: () => {
+      // 观战者请求棋盘状态，主机发送当前状态
+      if (state.network.role === 'host' && window.gomokuNetwork) {
+        // 发送当前棋盘状态给观战者
+        window.gomokuNetwork.sendBoardState(
+          state.board,
+          state.moves,
+          state.turn,
+          state.winner,
+          state.winningLine
+        );
+      }
+    },
+    onBoardState: (board, moves, turn, winner, winningLine) => {
+      // 观战者收到棋盘状态
+      if (state.network.role === 'spectator') {
+        state.board = board;
+        state.moves = moves;
+        state.turn = turn;
+        state.winner = winner;
+        state.winningLine = winningLine;
+        updateUI();
+        draw();
+      }
+    },
     onConnectionChange: (connected) => {
       // 连接状态变化
       state.network.connected = connected;

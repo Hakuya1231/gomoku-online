@@ -154,6 +154,9 @@ class GomokuNetwork {
         this.listenForMessages('guest');
       }
     });
+
+    // 监听观战者消息（用于响应状态请求）
+    this.listenForMessages('spectator');
   }
 
   // 加入房间（作为客机或观战者）
@@ -244,9 +247,24 @@ class GomokuNetwork {
         this.onConnectionChange(true);
       }
 
-      // 监听双方消息
+      // 监听三方消息（主机、客机、自己的状态同步）
       this.listenForMessages('host');
       this.listenForMessages('guest');
+      this.listenForMessages('spectator');
+
+      // 请求当前棋盘状态
+      this.requestBoardState();
+    });
+  }
+
+  // 请求棋盘状态
+  requestBoardState() {
+    const myRole = 'spectator';
+    const messagesRef = this.roomRef.child('messages/' + myRole);
+
+    messagesRef.push({
+      type: 'request_state',
+      timestamp: firebase.database.ServerValue.TIMESTAMP
     });
   }
 
@@ -292,6 +310,20 @@ class GomokuNetwork {
       case 'reset':
         if (this.onReset) {
           this.onReset(data.size, data.first);
+        }
+        break;
+
+      case 'request_state':
+        // 观战者请求棋盘状态
+        if (this.onBoardStateRequest) {
+          this.onBoardStateRequest();
+        }
+        break;
+
+      case 'board_state':
+        // 收到棋盘状态同步
+        if (this.onBoardState) {
+          this.onBoardState(data.board, data.moves, data.turn, data.winner, data.winningLine);
         }
         break;
 
@@ -344,6 +376,24 @@ class GomokuNetwork {
       type: 'reset',
       size,
       first
+    });
+  }
+
+  // 发送棋盘状态（给观战者）
+  sendBoardState(board, moves, turn, winner, winningLine) {
+    // 发送到 spectator 消息队列
+    const messagesRef = this.roomRef.child('messages/spectator');
+
+    messagesRef.push({
+      type: 'board_state',
+      board,
+      moves,
+      turn,
+      winner,
+      winningLine,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    }).catch(err => {
+      console.error('发送棋盘状态失败:', err);
     });
   }
 
