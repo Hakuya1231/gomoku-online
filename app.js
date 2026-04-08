@@ -919,7 +919,8 @@ function initNetwork() {
       updateUI();
 
       if (connected) {
-        // 连接成功，更新角色
+        // 连接成功，更新角色和连接状态
+        state.network.connected = true;
         state.network.role = window.gomokuNetwork.isHost ? 'host' : 'guest';
         state.network.roomId = window.gomokuNetwork.getRoomId();
 
@@ -931,6 +932,7 @@ function initNetwork() {
         resetGame();
       } else {
         // 断开连接
+        state.network.connected = false;
         if (btnDisconnect) btnDisconnect.style.display = 'none';
         // 显示创建房间按钮（主机）或提示（客机）
         if (state.network.role === 'host') {

@@ -260,8 +260,9 @@ class GomokuNetwork {
       return false;
     }
 
-    const targetRole = this.isHost ? 'guest' : 'host';
-    const messagesRef = this.roomRef.child('messages/' + targetRole);
+    // 发送到自己的消息队列，对方监听这个队列
+    const myRole = this.isHost ? 'host' : 'guest';
+    const messagesRef = this.roomRef.child('messages/' + myRole);
 
     messagesRef.push({
       ...data,
