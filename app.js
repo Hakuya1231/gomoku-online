@@ -428,125 +428,216 @@ function checkWinFrom(r, c, p) {
 
 // ===================== 禁手检测 =====================
 
-// 分析某个方向上的棋型
-function analyzeDirection(r, c, dr, dc, player) {
+// 检测某个方向上形成的棋型数量
+// 返回 { liveThree, four, overline }
+// 算法：构建以当前位置为中心的模式字符串，然后检查包含当前位置的棋型
+function countPatternsInDirection(r, c, dr, dc, player) {
   const board = state.board;
-  const size = state.size;
 
-  // 计算该方向上连续的棋子数和两端状态
-  let count = 1; // 包括当前位置
-  let block = 0; // 被堵住的一端数量
-  let empty1 = false, empty2 = false; // 两端是否为空
-
-  // 正方向
-  let k = 1;
-  while (true) {
-    const rr = r + dr * k, cc = c + dc * k;
-    if (!inBounds(rr, cc)) {
-      block++;
-      break;
-    }
-    if (board[rr][cc] === player) {
-      count++;
-      k++;
-    } else if (board[rr][cc] === null) {
-      empty1 = true;
-      break;
-    } else {
-      block++;
-      break;
-    }
-  }
-
-  // 反方向
-  k = 1;
-  while (true) {
-    const rr = r - dr * k, cc = c - dc * k;
-    if (!inBounds(rr, cc)) {
-      block++;
-      break;
-    }
-    if (board[rr][cc] === player) {
-      count++;
-      k++;
-    } else if (board[rr][cc] === null) {
-      empty2 = true;
-      break;
-    } else {
-      block++;
-      break;
-    }
-  }
-
-  return { count, block, empty1, empty2 };
-}
-
-// 检测是否是活三
-function isLiveThree(r, c, dr, dc, player) {
-  const board = state.board;
-  const size = state.size;
-
-  // 活三：三子连续且两端为空
-  // 还需要检查是否可以延伸成活四
-
-  // 在当前位置放置棋子（临时）
+  // 在(r,c)放置棋子
   board[r][c] = player;
 
-  let result = false;
-
-  // 检查是否形成活三
-  const analysis = analyzeDirection(r, c, dr, dc, player);
-
-  if (analysis.count === 3 && analysis.block === 0 && analysis.empty1 && analysis.empty2) {
-    // 检查两端是否可以延伸（跳一格检查）
-    let canExtend = false;
-
-    // 检查正方向延伸点
-    const r1 = r + dr * analysis.count;
-    const c1 = c + dc * analysis.count;
-    if (inBounds(r1, c1) && board[r1][c1] === null) {
-      canExtend = true;
-    }
-
-    // 检查反方向延伸点
-    const r2 = r - dr * analysis.count;
-    const c2 = c - dc * analysis.count;
-    if (inBounds(r2, c2) && board[r2][c2] === null) {
-      canExtend = true;
-    }
-
-    if (canExtend) {
-      result = true;
-    }
+  // 构建模式字符串：11个字符，索引5是当前位置
+  // P = 己方棋子，E = 空，O = 对方或边界
+  let cells = [];
+  for (let k = 5; k >= 1; k--) {
+    const rr = r - dr * k, cc = c - dc * k;
+    if (!inBounds(rr, cc)) cells.push('O');
+    else if (board[rr][cc] === player) cells.push('P');
+    else if (board[rr][cc] === null) cells.push('E');
+    else cells.push('O');
+  }
+  cells.push('P'); // 当前位置，索引5
+  for (let k = 1; k <= 5; k++) {
+    const rr = r + dr * k, cc = c + dc * k;
+    if (!inBounds(rr, cc)) cells.push('O');
+    else if (board[rr][cc] === player) cells.push('P');
+    else if (board[rr][cc] === null) cells.push('E');
+    else cells.push('O');
   }
 
   // 恢复棋盘
   board[r][c] = null;
 
-  return result;
-}
+  const CURRENT_INDEX = 5; // 当前位置在模式字符串中的索引
 
-// 检测是否形成四（活四或冲四）
-function isFour(r, c, dr, dc, player) {
-  const board = state.board;
-  board[r][c] = player;
+  let result = { liveThree: 0, four: 0, overline: 0 };
 
-  const analysis = analyzeDirection(r, c, dr, dc, player);
-  const result = analysis.count === 4;
+  // === 1. 检测长连禁手（6子或以上连续）===
+  // 计算当前位置两侧连续的己方棋子数量
+  let leftConsec = 0, rightConsec = 0;
+  for (let i = CURRENT_INDEX - 1; i >= 0 && cells[i] === 'P'; i--) leftConsec++;
+  for (let i = CURRENT_INDEX + 1; i <= 10 && cells[i] === 'P'; i++) rightConsec++;
 
-  board[r][c] = null;
-  return result;
-}
+  const totalConsec = leftConsec + 1 + rightConsec;
 
-// 检测是否形成长连（6子或以上）
-function isOverline(r, c, dr, dc, player) {
-  const board = state.board;
-  board[r][c] = player;
+  if (totalConsec >= 6) {
+    result.overline = 1;
+    return result; // 长连是最严重的禁手，直接返回
+  }
 
-  const analysis = analyzeDirection(r, c, dr, dc, player);
-  const result = analysis.count >= 6;
+  // === 2. 检测五连（胜利，不是禁手）===
+  if (totalConsec === 5) {
+    return result; // 五连获胜，无禁手
+  }
 
-  board[r][c] = null;
+  // === 3. 检测四（活四或冲四）===
+  // 四的定义：4个己方棋子（含当前），再下一步可以成五
+
+  // 3a. 连续四（4个连续的P）
+  if (totalConsec === 4) {
+    const leftEndIdx = CURRENT_INDEX - leftConsec - 1;
+    const rightEndIdx = CURRENT_INDEX + rightConsec + 1;
+    const leftEmpty = leftEndIdx >= 0 && cells[leftEndIdx] === 'E';
+    const rightEmpty = rightEndIdx <= 10 && cells[rightEndIdx] === 'E';
+    if (leftEmpty || rightEmpty) {
+      result.four = 1;
+    }
+  }
+
+  // 3b. 跳四（有跳跃空位的四）
+  // 模式：PPPEP（P P P 空 P），当前位置必须是其中一个P
+  // 模式：PEPPP（P 空 P P P），当前位置必须是其中一个P
+  // 模式：PPPPEP（四个P后有空再P），或 PEPPPP
+
+  // 检查各种跳四模式，确保包含当前位置
+  const checkJumpFour = () => {
+    // 从当前位置向两侧扩展检查跳四
+    // 情况1：左边有空，右边有P：P(current) E P P → 需要2个P在右边
+    if (cells[CURRENT_INDEX + 1] === 'E') {
+      let rightP = 0;
+      for (let i = CURRENT_INDEX + 2; i <= 10 && cells[i] === 'P'; i++) rightP++;
+      if (leftConsec + 1 + rightP === 4) {
+        // 检查是否能成五：左边或右边跳点后需有空
+        const leftEnd = CURRENT_INDEX - leftConsec - 1;
+        const jumpEnd = CURRENT_INDEX + 1 + rightP + 1;
+        if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (jumpEnd <= 10 && cells[jumpEnd] === 'E')) {
+          return true;
+        }
+      }
+    }
+
+    // 情况2：右边有空，左边有P：P P E P(current) → 需要2个P在左边
+    if (cells[CURRENT_INDEX - 1] === 'E') {
+      let leftP = 0;
+      for (let i = CURRENT_INDEX - 2; i >= 0 && cells[i] === 'P'; i--) leftP++;
+      if (leftP + 1 + rightConsec === 4) {
+        const rightEnd = CURRENT_INDEX + rightConsec + 1;
+        const jumpEnd = CURRENT_INDEX - 1 - leftP - 1;
+        if ((rightEnd <= 10 && cells[rightEnd] === 'E') || (jumpEnd >= 0 && cells[jumpEnd] === 'E')) {
+          return true;
+        }
+      }
+    }
+
+    // 情况3：跳点不在紧邻，而是更远处
+    // 模式如：PPP E P(current) P 或 P(current) P E PPP
+    // 左侧有连续P，然后空，然后当前P，然后右侧有P
+    for (let gapIdx = CURRENT_INDEX - 2; gapIdx >= CURRENT_INDEX - 4 && gapIdx >= 0; gapIdx--) {
+      if (cells[gapIdx] !== 'E') continue;
+      // gapIdx左侧的连续P数量
+      let leftP = 0;
+      for (let i = gapIdx - 1; i >= 0 && cells[i] === 'P'; i--) leftP++;
+      // gapIdx右侧到当前位置之间是否有P
+      let middleP = 0;
+      for (let i = gapIdx + 1; i < CURRENT_INDEX && cells[i] === 'P'; i++) middleP++;
+      // 总P数检查
+      if (leftP + middleP + 1 + rightConsec === 4) {
+        // 检查能否成五
+        const leftEnd = gapIdx - leftP - 1;
+        const rightEnd = CURRENT_INDEX + rightConsec + 1;
+        if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (rightEnd <= 10 && cells[rightEnd] === 'E')) {
+          return true;
+        }
+      }
+    }
+
+    // 右侧有连续P，然后空，然后当前P右侧有P
+    for (let gapIdx = CURRENT_INDEX + 2; gapIdx <= CURRENT_INDEX + 4 && gapIdx <= 10; gapIdx++) {
+      if (cells[gapIdx] !== 'E') continue;
+      let rightP = 0;
+      for (let i = gapIdx + 1; i <= 10 && cells[i] === 'P'; i++) rightP++;
+      let middleP = 0;
+      for (let i = gapIdx - 1; i > CURRENT_INDEX && cells[i] === 'P'; i--) middleP++;
+      if (leftConsec + 1 + middleP + rightP === 4) {
+        const leftEnd = CURRENT_INDEX - leftConsec - 1;
+        const rightEnd = gapIdx + rightP + 1;
+        if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (rightEnd <= 10 && cells[rightEnd] === 'E')) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
+
+  if (result.four === 0 && checkJumpFour()) {
+    result.four = 1;
+  }
+
+  // === 4. 检测活三 ===
+  // 活三的定义：可以一步变成活四的三
+  // 连活三：_PPP_ （当前位置是其中一个P，两侧有空）
+  // 跳活三：_PP_P_ 或 _P_PP_ （中间有空，两侧有空）
+
+  // 4a. 连活三（3个连续P，两端有空）
+  if (totalConsec === 3) {
+    const leftEndIdx = CURRENT_INDEX - leftConsec - 1;
+    const rightEndIdx = CURRENT_INDEX + rightConsec + 1;
+    // 两端都必须是空才是活三
+    if (leftEndIdx >= 0 && cells[leftEndIdx] === 'E' && rightEndIdx <= 10 && cells[rightEndIdx] === 'E') {
+      result.liveThree = 1;
+    }
+  }
+
+  // 4b. 跳活三
+  const checkJumpLiveThree = () => {
+    // 模式1：E P(current) P E P E → _PP_P_
+    // 当前位置在第一个P组（2个P），然后空，然后P
+    if (cells[CURRENT_INDEX + 1] === 'P' && cells[CURRENT_INDEX + 2] === 'E' && cells[CURRENT_INDEX + 3] === 'P') {
+      // 检查两端是否都是空
+      const leftEnd = CURRENT_INDEX - leftConsec - 1;
+      const rightEnd = CURRENT_INDEX + 4;
+      if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+        return true;
+      }
+    }
+
+    // 模式2：E P E P(current) P E → _P_PP_
+    // 左侧有P，然后空，然后当前P和右侧P
+    if (cells[CURRENT_INDEX - 1] === 'E' && cells[CURRENT_INDEX - 2] === 'P' && cells[CURRENT_INDEX + 1] === 'P') {
+      const leftEnd = CURRENT_INDEX - 3;
+      const rightEnd = CURRENT_INDEX + rightConsec + 2;
+      if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+        return true;
+      }
+    }
+
+    // 模式3：E P(current) E P P E → 当前在第一个P，空，然后两个P
+    if (cells[CURRENT_INDEX + 1] === 'E' && cells[CURRENT_INDEX + 2] === 'P' && cells[CURRENT_INDEX + 3] === 'P') {
+      const leftEnd = CURRENT_INDEX - leftConsec - 1;
+      const rightEnd = CURRENT_INDEX + 4;
+      if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+        return true;
+      }
+    }
+
+    // 模式4：E P P E P(current) E → 两个P在左侧，空，然后当前P
+    if (cells[CURRENT_INDEX - 1] === 'E' && cells[CURRENT_INDEX - 2] === 'P' && cells[CURRENT_INDEX - 3] === 'P') {
+      const leftEnd = CURRENT_INDEX - 4;
+      const rightEnd = CURRENT_INDEX + rightConsec + 1;
+      if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  if (result.liveThree === 0 && checkJumpLiveThree()) {
+    result.liveThree = 1;
+  }
+
   return result;
 }
 
@@ -555,48 +646,62 @@ function checkForbidden(r, c) {
   // 只对黑棋检测禁手
   if (state.turn !== 'B') return null;
 
-  // 暂时放置棋子
-  state.board[r][c] = 'B';
-
   const dirs = [
-    { dr: 0, dc: 1 },
-    { dr: 1, dc: 0 },
-    { dr: 1, dc: 1 },
-    { dr: 1, dc: -1 },
+    { dr: 0, dc: 1 },   // 横向
+    { dr: 1, dc: 0 },   // 纵向
+    { dr: 1, dc: 1 },   // 斜向
+    { dr: 1, dc: -1 },  // 反斜向
   ];
 
-  let liveThreeCount = 0;
-  let fourCount = 0;
+  let totalLiveThree = 0;
+  let totalFour = 0;
   let hasOverline = false;
+  let hasFive = false; // 五连获胜，优先于禁手判定
 
   for (const { dr, dc } of dirs) {
-    // 检测长连
-    if (isOverline(r, c, dr, dc, 'B')) {
-      hasOverline = true;
-    }
-
-    // 检测四
-    if (isFour(r, c, dr, dc, 'B')) {
-      fourCount++;
-    }
-
-    // 检测活三
-    if (isLiveThree(r, c, dr, dc, 'B')) {
-      liveThreeCount++;
-    }
+    const patterns = countPatternsInDirection(r, c, dr, dc, 'B');
+    totalLiveThree += patterns.liveThree;
+    totalFour += patterns.four;
+    if (patterns.overline) hasOverline = true;
+    // 注意：countPatternsInDirection 对于五连会返回空结果
+    // 但我们需要额外检查是否有五连
   }
 
-  // 恢复棋盘
-  state.board[r][c] = null;
+  // 额外检查是否有五连（获胜优先）
+  // 如果任意方向能形成五连，则不是禁手
+  const board = state.board;
+  board[r][c] = 'B';
+  for (const { dr, dc } of dirs) {
+    // 检查该方向的五连
+    let count = 1;
+    for (let k = 1; k <= 4; k++) {
+      const rr = r + dr * k, cc = c + dc * k;
+      if (!inBounds(rr, cc) || board[rr][cc] !== 'B') break;
+      count++;
+    }
+    for (let k = 1; k <= 4; k++) {
+      const rr = r - dr * k, cc = c - dc * k;
+      if (!inBounds(rr, cc) || board[rr][cc] !== 'B') break;
+      count++;
+    }
+    if (count >= 5) {
+      hasFive = true;
+      break;
+    }
+  }
+  board[r][c] = null;
+
+  // 五连获胜，不判禁手
+  if (hasFive) return null;
 
   // 判断禁手
   if (hasOverline) {
     return '长连禁手';
   }
-  if (fourCount >= 2) {
+  if (totalFour >= 2) {
     return '四四禁手';
   }
-  if (liveThreeCount >= 2) {
+  if (totalLiveThree >= 2) {
     return '三三禁手';
   }
 
