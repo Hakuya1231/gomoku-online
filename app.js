@@ -4,6 +4,7 @@ const canvas = $("board");
 const ctx = canvas.getContext("2d");
 
 const statusEl = $("status");
+const subtitleEl = $("subtitle");
 const btnRestart = $("btnRestart");
 const moveCountEl = $("moveCount");
 const lastMoveEl = $("lastMove");
@@ -122,6 +123,9 @@ function updateGameModeUI() {
   if (humanSideEl) humanSideEl.disabled = disableLocalSettings;
   if (aiLevelEl) aiLevelEl.disabled = disableLocalSettings;
 
+  // 更新 subtitle
+  updateSubtitle();
+
   // 更新状态文本
   if (gameMode === 'ONLINE') {
     // 如果是联机模式，设置网络模式
@@ -136,6 +140,29 @@ function updateGameModeUI() {
     state.network.mode = 'offline';
     // 状态文本会在updateUI中更新
   }
+}
+
+// 更新 subtitle 显示（模式和棋盘大小）
+function updateSubtitle() {
+  if (!subtitleEl) return;
+
+  const gameMode = state.mode;
+  const size = state.size;
+
+  let modeText = '';
+  if (gameMode === 'PVP') {
+    modeText = '本地双人对战';
+  } else if (gameMode === 'AI') {
+    modeText = '人机对战';
+  } else if (gameMode === 'ONLINE') {
+    if (state.network.role === 'spectator') {
+      modeText = '观战模式';
+    } else {
+      modeText = '联机对战';
+    }
+  }
+
+  subtitleEl.textContent = `${modeText} · ${size}×${size}`;
 }
 
 function resetGame({ size = state.size, first = state.first } = {}) {
@@ -176,6 +203,7 @@ function resetGame({ size = state.size, first = state.first } = {}) {
   // 更新模式
   state.mode = gameMode;
 
+  updateSubtitle();
   updateUI();
   draw();
 
@@ -1391,6 +1419,7 @@ function initNetwork() {
         // 重置游戏使用主机配置
         resetGame({ size, first });
         state.forbidden = forbidden;
+        updateSubtitle();
         draw();
       }
     },
