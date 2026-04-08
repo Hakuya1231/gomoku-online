@@ -12,6 +12,7 @@ const firstPlayerEl = $("firstPlayer");
 const boardSizeEl = $("boardSize");
 const toggleCoordsEl = $("toggleCoords");
 const toggleHintsEl = $("toggleHints");
+const toggleForbiddenEl = $("toggleForbidden");
 const gameModeEl = $("gameMode");
 const humanSideEl = $("humanSide");
 const aiLevelEl = $("aiLevel");
@@ -48,6 +49,7 @@ function createState(size, first = "B") {
     moves: [],
     showCoords: true,
     showHints: true,
+    forbidden: false, // 禁手规则
     hover: null,
     mode: "PVP",
     human: "B",
@@ -165,6 +167,7 @@ function resetGame({ size = state.size, first = state.first } = {}) {
     state = createState(size, first);
     state.showCoords = toggleCoordsEl.checked;
     state.showHints = toggleHintsEl.checked;
+    state.forbidden = toggleForbiddenEl.checked;
     state.mode = gameMode;
     state.human = humanSideEl?.value ?? "B";
     state.aiLevel = Number(aiLevelEl?.value ?? 1);
@@ -326,13 +329,32 @@ function drawHoverHint() {
   const { gap } = boardGeometry();
   const { x, y } = cellCenter(r, c);
   const radius = gap * 0.40;
+
+  // 检查是否是禁手位置
+  const isForbidden = state.forbidden && state.turn === 'B' && checkForbidden(r, c);
+
   ctx.save();
   ctx.globalAlpha = 0.35;
-  ctx.strokeStyle = state.turn === "B" ? "rgba(16,19,24,.75)" : "rgba(245,247,255,.9)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.stroke();
+
+  if (isForbidden) {
+    // 禁手位置显示红色X
+    ctx.strokeStyle = "rgba(255,80,80,.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - radius * 0.6, y - radius * 0.6);
+    ctx.lineTo(x + radius * 0.6, y + radius * 0.6);
+    ctx.moveTo(x + radius * 0.6, y - radius * 0.6);
+    ctx.lineTo(x - radius * 0.6, y + radius * 0.6);
+    ctx.stroke();
+  } else {
+    // 正常提示
+    ctx.strokeStyle = state.turn === "B" ? "rgba(16,19,24,.75)" : "rgba(245,247,255,.9)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -396,6 +418,183 @@ function checkWinFrom(r, c, p) {
   return null;
 }
 
+// ===================== 禁手检测 =====================
+
+// 分析某个方向上的棋型
+function analyzeDirection(r, c, dr, dc, player) {
+  const board = state.board;
+  const size = state.size;
+
+  // 计算该方向上连续的棋子数和两端状态
+  let count = 1; // 包括当前位置
+  let block = 0; // 被堵住的一端数量
+  let empty1 = false, empty2 = false; // 两端是否为空
+
+  // 正方向
+  let k = 1;
+  while (true) {
+    const rr = r + dr * k, cc = c + dc * k;
+    if (!inBounds(rr, cc)) {
+      block++;
+      break;
+    }
+    if (board[rr][cc] === player) {
+      count++;
+      k++;
+    } else if (board[rr][cc] === null) {
+      empty1 = true;
+      break;
+    } else {
+      block++;
+      break;
+    }
+  }
+
+  // 反方向
+  k = 1;
+  while (true) {
+    const rr = r - dr * k, cc = c - dc * k;
+    if (!inBounds(rr, cc)) {
+      block++;
+      break;
+    }
+    if (board[rr][cc] === player) {
+      count++;
+      k++;
+    } else if (board[rr][cc] === null) {
+      empty2 = true;
+      break;
+    } else {
+      block++;
+      break;
+    }
+  }
+
+  return { count, block, empty1, empty2 };
+}
+
+// 检测是否是活三
+function isLiveThree(r, c, dr, dc, player) {
+  const board = state.board;
+  const size = state.size;
+
+  // 活三：三子连续且两端为空
+  // 还需要检查是否可以延伸成活四
+
+  // 在当前位置放置棋子（临时）
+  board[r][c] = player;
+
+  let result = false;
+
+  // 检查是否形成活三
+  const analysis = analyzeDirection(r, c, dr, dc, player);
+
+  if (analysis.count === 3 && analysis.block === 0 && analysis.empty1 && analysis.empty2) {
+    // 检查两端是否可以延伸（跳一格检查）
+    let canExtend = false;
+
+    // 检查正方向延伸点
+    const r1 = r + dr * analysis.count;
+    const c1 = c + dc * analysis.count;
+    if (inBounds(r1, c1) && board[r1][c1] === null) {
+      canExtend = true;
+    }
+
+    // 检查反方向延伸点
+    const r2 = r - dr * analysis.count;
+    const c2 = c - dc * analysis.count;
+    if (inBounds(r2, c2) && board[r2][c2] === null) {
+      canExtend = true;
+    }
+
+    if (canExtend) {
+      result = true;
+    }
+  }
+
+  // 恢复棋盘
+  board[r][c] = null;
+
+  return result;
+}
+
+// 检测是否形成四（活四或冲四）
+function isFour(r, c, dr, dc, player) {
+  const board = state.board;
+  board[r][c] = player;
+
+  const analysis = analyzeDirection(r, c, dr, dc, player);
+  const result = analysis.count === 4;
+
+  board[r][c] = null;
+  return result;
+}
+
+// 检测是否形成长连（6子或以上）
+function isOverline(r, c, dr, dc, player) {
+  const board = state.board;
+  board[r][c] = player;
+
+  const analysis = analyzeDirection(r, c, dr, dc, player);
+  const result = analysis.count >= 6;
+
+  board[r][c] = null;
+  return result;
+}
+
+// 检测黑棋禁手
+function checkForbidden(r, c) {
+  // 只对黑棋检测禁手
+  if (state.turn !== 'B') return null;
+
+  // 暂时放置棋子
+  state.board[r][c] = 'B';
+
+  const dirs = [
+    { dr: 0, dc: 1 },
+    { dr: 1, dc: 0 },
+    { dr: 1, dc: 1 },
+    { dr: 1, dc: -1 },
+  ];
+
+  let liveThreeCount = 0;
+  let fourCount = 0;
+  let hasOverline = false;
+
+  for (const { dr, dc } of dirs) {
+    // 检测长连
+    if (isOverline(r, c, dr, dc, 'B')) {
+      hasOverline = true;
+    }
+
+    // 检测四
+    if (isFour(r, c, dr, dc, 'B')) {
+      fourCount++;
+    }
+
+    // 检测活三
+    if (isLiveThree(r, c, dr, dc, 'B')) {
+      liveThreeCount++;
+    }
+  }
+
+  // 恢复棋盘
+  state.board[r][c] = null;
+
+  // 判断禁手
+  if (hasOverline) {
+    return '长连禁手';
+  }
+  if (fourCount >= 2) {
+    return '四四禁手';
+  }
+  if (liveThreeCount >= 2) {
+    return '三三禁手';
+  }
+
+  return null;
+}
+
 function placeInternal(r, c) {
   if (state.winner) return;
   if (state.board[r][c]) return;
@@ -431,6 +630,15 @@ function place(r, c) {
     // 检查是否是本地玩家的回合
     if (state.turn !== state.human) {
       return; // 不是本地回合，不能落子
+    }
+  }
+
+  // 禁手检查（仅黑棋）
+  if (state.forbidden && state.turn === 'B') {
+    const forbidden = checkForbidden(r, c);
+    if (forbidden) {
+      alert(`禁手：${forbidden}，不能在此落子`);
+      return;
     }
   }
 
@@ -817,6 +1025,7 @@ aiLevelEl?.addEventListener("change", () => {
 });
 toggleCoordsEl.addEventListener("change", () => { state.showCoords = toggleCoordsEl.checked; draw(); });
 toggleHintsEl.addEventListener("change", () => { state.showHints = toggleHintsEl.checked; draw(); });
+toggleForbiddenEl.addEventListener("change", () => { state.forbidden = toggleForbiddenEl.checked; });
 
 // 联机面板事件
 if (btnCreateRoom) {
@@ -1112,6 +1321,7 @@ function handleDisconnectClick() {
 function init() {
   toggleCoordsEl.checked = true;
   toggleHintsEl.checked = true;
+  toggleForbiddenEl.checked = false;
   firstPlayerEl.value = "B";
   boardSizeEl.value = "15";
   gameModeEl.value = "PVP";
