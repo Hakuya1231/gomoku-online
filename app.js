@@ -4,7 +4,6 @@ const canvas = $("board");
 const ctx = canvas.getContext("2d");
 
 const statusEl = $("status");
-const btnUndo = $("btnUndo");
 const btnRestart = $("btnRestart");
 const moveCountEl = $("moveCount");
 const lastMoveEl = $("lastMove");
@@ -533,20 +532,6 @@ function updateUI() {
 
   statusEl.textContent = statusText;
 
-  // 按钮禁用逻辑
-  let undoDisabled = state.moves.length === 0 || state.aiThinking;
-  // 观战者不能悔棋
-  if (state.mode === "ONLINE" && state.network.role === 'spectator') {
-    undoDisabled = true;
-  }
-  // 联机模式：只有当前回合的一方可以悔棋
-  if (state.mode === "ONLINE" && state.network.role !== 'spectator' && state.network.connected) {
-    if (state.human !== state.turn) {
-      undoDisabled = true;
-    }
-  }
-  btnUndo.disabled = undoDisabled;
-
   moveCountEl.textContent = String(state.moves.length);
   const last = state.moves[state.moves.length - 1];
   lastMoveEl.textContent = last ? `${last.p === "B" ? "\u9ed1" : "\u767d"} @ ${cellToLabel(last.r, last.c)}` : "-";
@@ -802,7 +787,6 @@ canvas.addEventListener("click", (evt) => {
   if (cell) place(cell.r, cell.c);
 });
 
-btnUndo.addEventListener("click", () => undo());
 btnRestart.addEventListener("click", () => {
   // 联机模式：只有主机可以重开，并且发送重开消息
   if (state.mode === "ONLINE" && state.network.connected && window.gomokuNetwork) {
@@ -916,7 +900,6 @@ function handleCreateRoom() {
 }
 
 window.addEventListener("keydown", (e) => {
-  if (e.key === "z" || e.key === "Z") undo();
   if (e.key === "r" || e.key === "R") resetGame();
 });
 
@@ -990,8 +973,9 @@ function initNetwork() {
         boardArray = [];
         for (let r = 0; r < size; r++) {
           boardArray[r] = [];
+          const row = board[r];
           for (let c = 0; c < size; c++) {
-            boardArray[r][c] = board[r] && board[r][c] ? board[r][c] : null;
+            boardArray[r][c] = (row && row[c]) ? row[c] : null;
           }
         }
       }
@@ -1008,6 +992,7 @@ function initNetwork() {
         winningLineArray = Object.values(winningLine);
       }
 
+      console.log('转换后棋盘:', boardArray);
       state.board = boardArray;
       state.moves = movesArray || [];
       state.turn = turn;
