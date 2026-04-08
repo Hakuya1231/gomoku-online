@@ -695,8 +695,8 @@ function checkForbidden(r, c) {
     // 但我们需要额外检查是否有五连
   }
 
-  // 额外检查是否有五连（获胜优先）
-  // 如果任意方向能形成五连，则不是禁手
+  // 额外检查是否有恰好五连（获胜优先）
+  // 注意：六连及以上由长连禁手处理，不算获胜
   const board = state.board;
   board[r][c] = 'B';
   for (const { dr, dc } of dirs) {
@@ -712,20 +712,24 @@ function checkForbidden(r, c) {
       if (!inBounds(rr, cc) || board[rr][cc] !== 'B') break;
       count++;
     }
-    if (count >= 5) {
+    // 只有恰好五连才是获胜，六连及以上是长连禁手
+    if (count === 5) {
       hasFive = true;
       break;
     }
   }
   board[r][c] = null;
 
+  // 先判断长连禁手（六连及以上）
+  // 注意：必须在五连检测之前判断，因为五连检测只走4步，可能将六连误判为五连
+  if (hasOverline) {
+    return '长连禁手';
+  }
+
   // 五连获胜，不判禁手
   if (hasFive) return null;
 
   // 判断禁手
-  if (hasOverline) {
-    return '长连禁手';
-  }
   if (totalFour >= 2) {
     return '四四禁手';
   }
