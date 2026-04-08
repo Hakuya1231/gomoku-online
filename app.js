@@ -906,16 +906,37 @@ function initNetwork() {
   // 初始化网络模块
   window.gomokuNetwork.init({
     onMove: (r, c, playerSide) => {
-      // 收到对手落子
-      if (state.network.connected && state.turn !== state.human) {
+      // 收到落子消息
+      if (!state.network.connected) return;
+
+      // 观战者直接渲染
+      if (state.network.role === 'spectator') {
+        placeInternal(r, c);
+        return;
+      }
+
+      // 对战者检查是否是对手的回合
+      if (state.turn !== state.human) {
         placeInternal(r, c);
       }
     },
     onUndo: () => {
-      // 收到对手悔棋
-      if (state.network.connected) {
-        undo();
+      // 收到悔棋消息
+      if (!state.network.connected) return;
+
+      // 观战者直接执行悔棋（绕过权限检查，悔两步）
+      if (state.network.role === 'spectator') {
+        doUndoOne();
+        if (state.moves.length > 0) {
+          doUndoOne();
+        }
+        updateUI();
+        draw();
+        return;
       }
+
+      // 对战者正常处理
+      undo();
     },
     onReset: (size, first) => {
       // 收到对手重开
