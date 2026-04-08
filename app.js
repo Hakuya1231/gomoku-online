@@ -1356,12 +1356,14 @@ function initNetwork() {
         if (btnDisconnect) btnDisconnect.style.display = 'block';
         if (roomIdDisplayEl) roomIdDisplayEl.textContent = state.network.roomId;
 
-        // 观战者不重置游戏（只观看）
-        if (state.network.role !== 'spectator') {
-          // 重置游戏（联机模式）
+        // 主机：发送游戏配置给客机，然后重置游戏
+        if (state.network.role === 'host') {
+          window.gomokuNetwork.sendGameConfig(state.size, state.first, state.forbidden);
           resetGame();
-        } else {
-          // 观战者模式提示
+        }
+        // 客机：等待收到game_config后再初始化（不在这里重置）
+        // 观战者不重置游戏（只观看）
+        else if (state.network.role === 'spectator') {
           statusEl.textContent = '观战模式 - 只能观看对局';
           updateUI();
         }
@@ -1375,6 +1377,21 @@ function initNetwork() {
         } else {
           connectSection.style.display = 'block';
         }
+      }
+    },
+    onGameConfig: (size, first, forbidden) => {
+      // 客机收到游戏配置
+      console.log('收到游戏配置:', size, first, forbidden);
+      if (state.network.role === 'guest') {
+        // 更新本地设置
+        if (boardSizeEl) boardSizeEl.value = size;
+        if (firstPlayerEl) firstPlayerEl.value = first;
+        if (toggleForbiddenEl) toggleForbiddenEl.checked = forbidden;
+
+        // 重置游戏使用主机配置
+        resetGame({ size, first });
+        state.forbidden = forbidden;
+        draw();
       }
     },
     onRoomCreated: (roomId) => {

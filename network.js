@@ -19,6 +19,7 @@ class GomokuNetwork {
     this.onRoomCreated = null;
     this.onBoardState = null;
     this.onBoardStateRequest = null;
+    this.onGameConfig = null; // 新增：游戏配置同步回调
 
     // UI 元素引用
     this.statusEl = null;
@@ -48,6 +49,7 @@ class GomokuNetwork {
       onRoomCreated,
       onBoardState,
       onBoardStateRequest,
+      onGameConfig,
       statusEl,
       roomIdDisplayEl,
       opponentInfoEl
@@ -61,6 +63,7 @@ class GomokuNetwork {
     this.onRoomCreated = onRoomCreated;
     this.onBoardState = onBoardState;
     this.onBoardStateRequest = onBoardStateRequest;
+    this.onGameConfig = onGameConfig;
 
     this.statusEl = statusEl;
     this.roomIdDisplayEl = roomIdDisplayEl;
@@ -343,6 +346,14 @@ class GomokuNetwork {
         }
         break;
 
+      case 'game_config':
+        // 收到游戏配置（棋盘大小等）
+        console.log('收到游戏配置:', data);
+        if (this.onGameConfig) {
+          this.onGameConfig(data.size, data.first, data.forbidden);
+        }
+        break;
+
       default:
         console.log('未知消息类型:', data.type);
     }
@@ -410,6 +421,21 @@ class GomokuNetwork {
       timestamp: firebase.database.ServerValue.TIMESTAMP
     }).catch(err => {
       console.error('发送棋盘状态失败:', err);
+    });
+  }
+
+  // 发送游戏配置（给客机）
+  sendGameConfig(size, first, forbidden) {
+    const messagesRef = this.roomRef.child('messages/host');
+
+    messagesRef.push({
+      type: 'game_config',
+      size,
+      first,
+      forbidden,
+      timestamp: firebase.database.ServerValue.TIMESTAMP
+    }).catch(err => {
+      console.error('发送游戏配置失败:', err);
     });
   }
 
