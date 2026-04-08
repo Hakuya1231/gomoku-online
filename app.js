@@ -116,12 +116,13 @@ function updateGameModeUI() {
   }
 
   // 联机模式下禁用一些本地设置
-  const disableLocalSettings = gameMode === 'ONLINE';
+  const disableLocalSettings = gameMode === 'ONLINE' && state.network.connected;
 
   if (firstPlayerEl) firstPlayerEl.disabled = disableLocalSettings;
   if (boardSizeEl) boardSizeEl.disabled = disableLocalSettings;
-  if (humanSideEl) humanSideEl.disabled = disableLocalSettings;
-  if (aiLevelEl) aiLevelEl.disabled = disableLocalSettings;
+  // 主机在连接前可以选择执子，连接后禁用
+  if (humanSideEl) humanSideEl.disabled = disableLocalSettings || (gameMode === 'ONLINE' && state.network.role === 'guest');
+  if (aiLevelEl) aiLevelEl.disabled = gameMode === 'ONLINE';
 
   // 更新 subtitle
   updateSubtitle();
@@ -172,22 +173,24 @@ function resetGame({ size = state.size, first = state.first } = {}) {
   if (gameMode === 'ONLINE' && state.network.role) {
     // 在网络模式下，保持当前网络状态
     const networkState = state.network;
+    const hostSide = state.network.hostSide || 'B'; // 主机执子选择，默认黑
     state = createState(size, first);
     state.network = networkState;
+    state.network.hostSide = hostSide;
 
-    // 联机模式下，本地玩家执子由角色决定
+    // 联机模式下，本地玩家执子由主机设置决定
     if (state.network.role === 'host') {
-      state.human = 'B'; // 主机执黑
-      state.first = 'B'; // 黑先
-      if (humanSideEl) humanSideEl.value = 'B';
+      state.human = hostSide; // 主机执选择的颜色
+      state.first = first; // 使用主机设置的先手
+      if (humanSideEl) humanSideEl.value = hostSide;
     } else if (state.network.role === 'guest') {
-      state.human = 'W'; // 客机执白
-      state.first = 'B'; // 黑先（主机先走）
-      if (humanSideEl) humanSideEl.value = 'W';
+      state.human = hostSide === 'B' ? 'W' : 'B'; // 客机执相反颜色
+      state.first = first; // 使用主机同步的先手设置
+      if (humanSideEl) humanSideEl.value = state.human;
     } else if (state.network.role === 'spectator') {
       // 观战者不执子，可以看双方的棋
       state.human = null;
-      state.first = 'B';
+      state.first = first;
     }
   } else {
     // 非联机模式，正常重置
@@ -1390,7 +1393,9 @@ function initNetwork() {
 
         // 主机：发送游戏配置给客机，然后重置游戏
         if (state.network.role === 'host') {
-          window.gomokuNetwork.sendGameConfig(state.size, state.first, state.forbidden);
+          // 保存主机执子选择
+          state.network.hostSide = humanSideEl?.value || 'B';
+          window.gomokuNetwork.sendGameConfig(state.size, state.first, state.forbidden, state.network.hostSide);
           resetGame();
         }
         // 客机：等待收到game_config后再初始化（不在这里重置）
@@ -1411,19 +1416,23 @@ function initNetwork() {
         }
       }
     },
-    onGameConfig: (size, first, forbidden) => {
+    onGameConfig: (size, first, forbidden, hostSide) => {
       // 客机收到游戏配置
-      console.log('收到游戏配置:', size, first, forbidden);
+      console.log('收到游戏配置:', size, first, forbidden, hostSide);
       if (state.network.role === 'guest') {
         // 更新本地设置
         if (boardSizeEl) boardSizeEl.value = size;
         if (firstPlayerEl) firstPlayerEl.value = first;
         if (toggleForbiddenEl) toggleForbiddenEl.checked = forbidden;
 
+        // 保存主机执子选择
+        state.network.hostSide = hostSide || 'B';
+
         // 重置游戏使用主机配置
         resetGame({ size, first });
         state.forbidden = forbidden;
         updateSubtitle();
+        updateGameModeUI();
         draw();
       }
     },
@@ -1431,6 +1440,7 @@ function initNetwork() {
       // 房间创建完成
       state.network.roomId = roomId;
       state.network.role = 'host';
+      state.network.hostSide = humanSideEl?.value || 'B'; // 保存主机执子选择
 
       // 生成并显示分享链接
       const shareLink = generateShareLink(roomId);

@@ -350,7 +350,7 @@ class GomokuNetwork {
         // 收到游戏配置（棋盘大小等）
         console.log('收到游戏配置:', data);
         if (this.onGameConfig) {
-          this.onGameConfig(data.size, data.first, data.forbidden);
+          this.onGameConfig(data.size, data.first, data.forbidden, data.hostSide);
         }
         break;
 
@@ -425,7 +425,7 @@ class GomokuNetwork {
   }
 
   // 发送游戏配置（给客机）
-  sendGameConfig(size, first, forbidden) {
+  sendGameConfig(size, first, forbidden, hostSide) {
     const messagesRef = this.roomRef.child('messages/host');
 
     messagesRef.push({
@@ -433,6 +433,7 @@ class GomokuNetwork {
       size,
       first,
       forbidden,
+      hostSide, // 主机执子：'B' 或 'W'
       timestamp: firebase.database.ServerValue.TIMESTAMP
     }).catch(err => {
       console.error('发送游戏配置失败:', err);
