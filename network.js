@@ -325,7 +325,7 @@ class GomokuNetwork {
 
       case 'reset':
         if (this.onReset) {
-          this.onReset(data.size, data.first);
+          this.onReset(data.size);
         }
         break;
 
@@ -350,7 +350,7 @@ class GomokuNetwork {
         // 收到游戏配置（棋盘大小等）
         console.log('收到游戏配置:', data);
         if (this.onGameConfig) {
-          this.onGameConfig(data.size, data.first, data.forbidden, data.hostSide);
+          this.onGameConfig(data.size, data.forbidden, data.hostSide);
         }
         break;
 
@@ -398,11 +398,10 @@ class GomokuNetwork {
   }
 
   // 发送重开
-  sendReset(size, first) {
+  sendReset(size) {
     return this.send({
       type: 'reset',
-      size,
-      first
+      size
     });
   }
 
@@ -425,13 +424,12 @@ class GomokuNetwork {
   }
 
   // 发送游戏配置（给客机）
-  sendGameConfig(size, first, forbidden, hostSide) {
+  sendGameConfig(size, forbidden, hostSide) {
     const messagesRef = this.roomRef.child('messages/host');
 
     messagesRef.push({
       type: 'game_config',
       size,
-      first,
       forbidden,
       hostSide, // 主机执子：'B' 或 'W'
       timestamp: firebase.database.ServerValue.TIMESTAMP

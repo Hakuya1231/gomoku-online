@@ -9,7 +9,6 @@ const btnRestart = $("btnRestart");
 const moveCountEl = $("moveCount");
 const lastMoveEl = $("lastMove");
 const winnerEl = $("winner");
-const firstPlayerEl = $("firstPlayer");
 const boardSizeEl = $("boardSize");
 const toggleCoordsEl = $("toggleCoords");
 const toggleHintsEl = $("toggleHints");
@@ -118,7 +117,6 @@ function updateGameModeUI() {
   // 联机模式下禁用一些本地设置
   const disableLocalSettings = gameMode === 'ONLINE' && state.network.connected;
 
-  if (firstPlayerEl) firstPlayerEl.disabled = disableLocalSettings;
   if (boardSizeEl) boardSizeEl.disabled = disableLocalSettings;
   // 主机在连接前可以选择执子，连接后禁用
   if (humanSideEl) humanSideEl.disabled = disableLocalSettings || (gameMode === 'ONLINE' && state.network.role === 'guest');
@@ -166,8 +164,9 @@ function updateSubtitle() {
   subtitleEl.textContent = `${modeText} · ${size}×${size}`;
 }
 
-function resetGame({ size = state.size, first = state.first } = {}) {
+function resetGame({ size = state.size } = {}) {
   const gameMode = gameModeEl?.value ?? "PVP";
+  const first = 'B'; // 永远黑棋先手
 
   // 如果是联机模式，根据角色决定执子
   if (gameMode === 'ONLINE' && state.network.role) {
@@ -181,16 +180,13 @@ function resetGame({ size = state.size, first = state.first } = {}) {
     // 联机模式下，本地玩家执子由主机设置决定
     if (state.network.role === 'host') {
       state.human = hostSide; // 主机执选择的颜色
-      state.first = first; // 使用主机设置的先手
       if (humanSideEl) humanSideEl.value = hostSide;
     } else if (state.network.role === 'guest') {
       state.human = hostSide === 'B' ? 'W' : 'B'; // 客机执相反颜色
-      state.first = first; // 使用主机同步的先手设置
       if (humanSideEl) humanSideEl.value = state.human;
     } else if (state.network.role === 'spectator') {
       // 观战者不执子，可以看双方的棋
       state.human = null;
-      state.first = first;
     }
   } else {
     // 非联机模式，正常重置
@@ -1150,14 +1146,11 @@ btnRestart.addEventListener("click", () => {
       return;
     }
     // 发送重开消息
-    window.gomokuNetwork.sendReset(state.size, state.first);
+    window.gomokuNetwork.sendReset(state.size);
   }
   resetGame();
 });
 
-firstPlayerEl.addEventListener("change", () => {
-  resetGame({ first: firstPlayerEl.value });
-});
 boardSizeEl.addEventListener("change", () => {
   resetGame({ size: Number(boardSizeEl.value) });
 });
@@ -1317,10 +1310,10 @@ function initNetwork() {
       updateUI();
       draw();
     },
-    onReset: (size, first) => {
+    onReset: (size) => {
       // 收到对手重开
       if (state.network.connected) {
-        resetGame({ size, first });
+        resetGame({ size });
       }
     },
     onBoardStateRequest: () => {
@@ -1395,7 +1388,7 @@ function initNetwork() {
         if (state.network.role === 'host') {
           // 保存主机执子选择
           state.network.hostSide = humanSideEl?.value || 'B';
-          window.gomokuNetwork.sendGameConfig(state.size, state.first, state.forbidden, state.network.hostSide);
+          window.gomokuNetwork.sendGameConfig(state.size, state.forbidden, state.network.hostSide);
           resetGame();
         }
         // 客机：等待收到game_config后再初始化（不在这里重置）
@@ -1416,13 +1409,12 @@ function initNetwork() {
         }
       }
     },
-    onGameConfig: (size, first, forbidden, hostSide) => {
+    onGameConfig: (size, forbidden, hostSide) => {
       // 客机收到游戏配置
-      console.log('收到游戏配置:', size, first, forbidden, hostSide);
+      console.log('收到游戏配置:', size, forbidden, hostSide);
       if (state.network.role === 'guest') {
         // 更新本地设置
         if (boardSizeEl) boardSizeEl.value = size;
-        if (firstPlayerEl) firstPlayerEl.value = first;
         if (toggleForbiddenEl) toggleForbiddenEl.checked = forbidden;
 
         // 保存主机执子选择
@@ -1494,7 +1486,6 @@ function init() {
   toggleCoordsEl.checked = true;
   toggleHintsEl.checked = true;
   toggleForbiddenEl.checked = false;
-  firstPlayerEl.value = "B";
   boardSizeEl.value = "15";
   gameModeEl.value = "PVP";
   humanSideEl.value = "B";
@@ -1514,7 +1505,7 @@ function init() {
     autoJoinRoom(roomId);
   } else {
     // 正常初始化
-    resetGame({ size: 15, first: "B" });
+    resetGame({ size: 15 });
   }
 }
 
