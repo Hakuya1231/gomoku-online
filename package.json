@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "五子棋游戏 - 支持本地/联机对战",
   "scripts": {
-    "start": "npx serve -p 8080",
+    "start": "npx serve -p 8080 -s",
     "test": "node test.js",
     "test:e2e": "npx playwright test e2e.spec.js"
   },

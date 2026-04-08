@@ -63,7 +63,7 @@ async function clickAt(page, row, col, gridSize = 15) {
 
 test.describe('Gomoku Game', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:8080/index.html');
+    await page.goto('http://localhost:8080/');
     await page.waitForSelector('#board');
   });
 
@@ -550,6 +550,122 @@ test.describe('Gomoku Game', () => {
 
       const status = await page.locator('#status').textContent();
       expect(status).toContain('黑方获胜');
+    });
+  });
+
+  // ==================== 8. 联机模式测试 ====================
+
+  test.describe('联机模式测试', () => {
+    test('TC-110: 创建房间成功', async ({ browser }) => {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto('http://localhost:8080/');
+      await page.waitForSelector('#board');
+
+      // 切换到联机模式
+      await page.selectOption('#gameMode', 'ONLINE');
+      await page.waitForTimeout(200);
+
+      // 点击创建房间
+      await page.click('#btnCreateRoom');
+      await page.waitForTimeout(2000);
+
+      // 检查房间号显示
+      const roomId = await page.locator('#roomIdDisplay').textContent();
+      expect(roomId).not.toBe('-');
+      expect(roomId.length).toBe(6);
+
+      await context.close();
+    });
+
+    test('TC-140: 联机模式棋盘大小同步', async ({ browser }) => {
+      // 创建两个浏览器上下文
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      // 主机设置
+      await hostPage.goto('http://localhost:8080/');
+      await hostPage.waitForSelector('#board');
+
+      // 主机选择19x19棋盘
+      await hostPage.selectOption('#boardSize', '19');
+      await hostPage.waitForTimeout(100);
+
+      // 切换到联机模式
+      await hostPage.selectOption('#gameMode', 'ONLINE');
+      await hostPage.waitForTimeout(200);
+
+      // 点击创建房间
+      await hostPage.click('#btnCreateRoom');
+      await hostPage.waitForTimeout(2000);
+
+      // 获取房间号
+      const roomId = await hostPage.locator('#roomIdDisplay').textContent();
+      expect(roomId).not.toBe('-');
+
+      // 客机加入房间（使用根URL）
+      await guestPage.goto('http://localhost:8080/?room=' + roomId);
+      await guestPage.waitForSelector('#board');
+      await guestPage.waitForTimeout(3000);
+
+      // 检查客机是否连接成功
+      const guestStatus = await guestPage.locator('#connectionStatus').textContent();
+      console.log('客机状态:', guestStatus);
+
+      // 等待主机检测到客机连接
+      await hostPage.waitForTimeout(2000);
+
+      // 检查主机状态
+      const hostStatus = await hostPage.locator('#connectionStatus').textContent();
+      console.log('主机状态:', hostStatus);
+
+      // 检查客机的棋盘大小是否同步
+      const guestSubtitle = await guestPage.locator('#subtitle').textContent();
+      console.log('客机subtitle:', guestSubtitle);
+
+      // 客机应该显示19x19
+      expect(guestSubtitle).toContain('19×19');
+
+      await hostContext.close();
+      await guestContext.close();
+    });
+
+    test('TC-142: 联机模式禁手规则同步', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      await hostPage.goto('http://localhost:8080/');
+      await hostPage.waitForSelector('#board');
+
+      // 主机开启禁手规则
+      await hostPage.locator('#toggleForbidden + .slider').click();
+      await hostPage.waitForTimeout(100);
+
+      // 切换到联机模式并创建房间
+      await hostPage.selectOption('#gameMode', 'ONLINE');
+      await hostPage.waitForTimeout(200);
+      await hostPage.click('#btnCreateRoom');
+      await hostPage.waitForTimeout(2000);
+
+      const roomId = await hostPage.locator('#roomIdDisplay').textContent();
+
+      // 客机加入（使用根URL）
+      await guestPage.goto('http://localhost:8080/?room=' + roomId);
+      await guestPage.waitForSelector('#board');
+      await guestPage.waitForTimeout(3000);
+
+      // 检查客机的禁手设置是否同步
+      const guestForbidden = await guestPage.locator('#toggleForbidden').isChecked();
+      expect(guestForbidden).toBe(true);
+
+      await hostContext.close();
+      await guestContext.close();
     });
   });
 });

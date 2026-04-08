@@ -1421,6 +1421,7 @@ function initNetwork() {
         state.network.hostSide = hostSide || 'B';
 
         // 重置游戏使用主机配置
+        const first = 'B'; // 永远黑棋先手
         resetGame({ size, first });
         state.forbidden = forbidden;
         updateSubtitle();
