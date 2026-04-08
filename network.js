@@ -17,6 +17,8 @@ class GomokuNetwork {
     this.onConnectionChange = null;
     this.onError = null;
     this.onRoomCreated = null;
+    this.onBoardState = null;
+    this.onBoardStateRequest = null;
 
     // UI 元素引用
     this.statusEl = null;
@@ -44,6 +46,8 @@ class GomokuNetwork {
       onConnectionChange,
       onError,
       onRoomCreated,
+      onBoardState,
+      onBoardStateRequest,
       statusEl,
       roomIdDisplayEl,
       opponentInfoEl
@@ -55,6 +59,8 @@ class GomokuNetwork {
     this.onConnectionChange = onConnectionChange;
     this.onError = onError;
     this.onRoomCreated = onRoomCreated;
+    this.onBoardState = onBoardState;
+    this.onBoardStateRequest = onBoardStateRequest;
 
     this.statusEl = statusEl;
     this.roomIdDisplayEl = roomIdDisplayEl;
@@ -322,8 +328,11 @@ class GomokuNetwork {
 
       case 'board_state':
         // 收到棋盘状态同步
+        console.log('handleMessage board_state:', data);
         if (this.onBoardState) {
           this.onBoardState(data.board, data.moves, data.turn, data.winner, data.winningLine);
+        } else {
+          console.warn('onBoardState 回调未设置');
         }
         break;
 

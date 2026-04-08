@@ -938,15 +938,14 @@ function initNetwork() {
     },
     onBoardState: (board, moves, turn, winner, winningLine) => {
       // 观战者收到棋盘状态
-      if (state.network.role === 'spectator') {
-        state.board = board;
-        state.moves = moves;
-        state.turn = turn;
-        state.winner = winner;
-        state.winningLine = winningLine;
-        updateUI();
-        draw();
-      }
+      console.log('收到棋盘状态:', { board, moves, turn, winner, winningLine, role: state.network.role });
+      state.board = board;
+      state.moves = moves;
+      state.turn = turn;
+      state.winner = winner;
+      state.winningLine = winningLine;
+      updateUI();
+      draw();
     },
     onConnectionChange: (connected) => {
       // 连接状态变化
