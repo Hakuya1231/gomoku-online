@@ -331,23 +331,31 @@ function drawHoverHint() {
   const radius = gap * 0.40;
 
   // 检查是否是禁手位置
-  const isForbidden = state.forbidden && state.turn === 'B' && checkForbidden(r, c);
+  const forbiddenType = state.forbidden && state.turn === 'B' ? checkForbidden(r, c) : null;
 
   ctx.save();
-  ctx.globalAlpha = 0.35;
 
-  if (isForbidden) {
-    // 禁手位置显示红色X
-    ctx.strokeStyle = "rgba(255,80,80,.9)";
+  if (forbiddenType) {
+    // 禁手位置显示红色X和提示
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "rgba(255,60,60,1)";
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(x - radius * 0.6, y - radius * 0.6);
-    ctx.lineTo(x + radius * 0.6, y + radius * 0.6);
-    ctx.moveTo(x + radius * 0.6, y - radius * 0.6);
-    ctx.lineTo(x - radius * 0.6, y + radius * 0.6);
+    ctx.moveTo(x - radius * 0.7, y - radius * 0.7);
+    ctx.lineTo(x + radius * 0.7, y + radius * 0.7);
+    ctx.moveTo(x + radius * 0.7, y - radius * 0.7);
+    ctx.lineTo(x - radius * 0.7, y + radius * 0.7);
     ctx.stroke();
+
+    // 显示禁手类型文字
+    ctx.fillStyle = "rgba(255,60,60,1)";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(forbiddenType, x, y + radius + 4);
   } else {
     // 正常提示
+    ctx.globalAlpha = 0.35;
     ctx.strokeStyle = state.turn === "B" ? "rgba(16,19,24,.75)" : "rgba(245,247,255,.9)";
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -637,8 +645,7 @@ function place(r, c) {
   if (state.forbidden && state.turn === 'B') {
     const forbidden = checkForbidden(r, c);
     if (forbidden) {
-      alert(`禁手：${forbidden}，不能在此落子`);
-      return;
+      return; // 禁手位置，阻止落子
     }
   }
 
