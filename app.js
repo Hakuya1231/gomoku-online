@@ -939,11 +939,37 @@ function initNetwork() {
     onBoardState: (board, moves, turn, winner, winningLine) => {
       // 观战者收到棋盘状态
       console.log('收到棋盘状态:', { board, moves, turn, winner, winningLine, role: state.network.role });
-      state.board = board;
-      state.moves = moves;
+
+      // Firebase 可能将数组转换为对象，需要转换回来
+      let boardArray = board;
+      if (board && !Array.isArray(board)) {
+        const size = state.size;
+        boardArray = [];
+        for (let r = 0; r < size; r++) {
+          boardArray[r] = [];
+          for (let c = 0; c < size; c++) {
+            boardArray[r][c] = board[r] && board[r][c] ? board[r][c] : null;
+          }
+        }
+      }
+
+      // moves 也可能需要转换
+      let movesArray = moves;
+      if (moves && !Array.isArray(moves)) {
+        movesArray = Object.values(moves);
+      }
+
+      // winningLine 也可能需要转换
+      let winningLineArray = winningLine;
+      if (winningLine && !Array.isArray(winningLine)) {
+        winningLineArray = Object.values(winningLine);
+      }
+
+      state.board = boardArray;
+      state.moves = movesArray || [];
       state.turn = turn;
       state.winner = winner;
-      state.winningLine = winningLine;
+      state.winningLine = winningLineArray;
       updateUI();
       draw();
     },
