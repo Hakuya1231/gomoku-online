@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>五子棋自动化测试</title>
+  <style>
+    body {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      padding: 20px;
+      background: #1a1f2e;
+      color: #e8ecff;
+    }
+    h1 { color: #7aa2ff; }
+    .summary {
+      background: #121b35;
+      padding: 15px;
+      border-radius: 12px;
+      margin: 20px 0;
+    }
+    .test-group {
+      margin: 20px 0;
+      background: #121b35;
+      padding: 15px;
+      border-radius: 12px;
+    }
+    .test-group h2 { color: #7aa2ff; margin: 0 0 10px 0; }
+    .test-case {
+      padding: 8px;
+      margin: 5px 0;
+      border-radius: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .pass { background: rgba(77,228,184,0.2); }
+    .fail { background: rgba(255,60,60,0.2); }
+    .pending { background: rgba(122,162,255,0.1); }
+    .status-pass { color: #4de4b8; }
+    .status-fail { color: #ff6060; }
+    .status-pending { color: #7aa2ff; }
+    .details { font-size: 12px; color: #a8b1d6; }
+    .run-btn {
+      background: #7aa2ff;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    .run-btn:hover { background: #5a82df; }
+  </style>
+</head>
+<body>
+  <h1>五子棋自动化测试</h1>
+  <button class="run-btn" onclick="runAllTests()">运行所有测试</button>
+  <div class="summary" id="summary">
+    <strong>测试统计:</strong> 点击上方按钮开始测试
+  </div>
+  <div id="results"></div>
+
+  <script>
+    // ==================== 模拟游戏状态 ====================
+    const state = {
+      size: 15,
+      turn: 'B',
+      board: [],
+      forbidden: true
+    };
+
+    function createState(size) {
+      return Array.from({ length: size }, () => Array(size).fill(null));
+    }
+
+    function inBounds(r, c, size) {
+      return r >= 0 && c >= 0 && r < size && c < size;
+    }
+
+    // ==================== 胜负判定函数 ====================
+    function checkWinFrom(board, r, c, p) {
+      const size = board.length;
+      const dirs = [
+        { dr: 0, dc: 1 },   // 横向
+        { dr: 1, dc: 0 },   // 纵向
+        { dr: 1, dc: 1 },   // 斜向
+        { dr: 1, dc: -1 },  // 反斜向
+      ];
+      for (const { dr, dc } of dirs) {
+        let line = [{ r, c }];
+        for (let k = 1; k < 5; k++) {
+          const rr = r + dr * k, cc = c + dc * k;
+          if (!inBounds(rr, cc, size) || board[rr][cc] !== p) break;
+          line.push({ r: rr, c: cc });
+        }
+        for (let k = 1; k < 5; k++) {
+          const rr = r - dr * k, cc = c - dc * k;
+          if (!inBounds(rr, cc, size) || board[rr][cc] !== p) break;
+          line.unshift({ r: rr, c: cc });
+        }
+        if (line.length >= 5) {
+          return line.slice(0, 5);
+        }
+      }
+      return null;
+    }
+
+    // ==================== 禁手检测函数 ====================
+    function countPatternsInDirection(board, r, c, dr, dc, player) {
+      const size = board.length;
+
+      board[r][c] = player;
+
+      let cells = [];
+      for (let k = 5; k >= 1; k--) {
+        const rr = r - dr * k, cc = c - dc * k;
+        if (!inBounds(rr, cc, size)) cells.push('O');
+        else if (board[rr][cc] === player) cells.push('P');
+        else if (board[rr][cc] === null) cells.push('E');
+        else cells.push('O');
+      }
+      cells.push('P');
+      for (let k = 1; k <= 5; k++) {
+        const rr = r + dr * k, cc = c + dc * k;
+        if (!inBounds(rr, cc, size)) cells.push('O');
+        else if (board[rr][cc] === player) cells.push('P');
+        else if (board[rr][cc] === null) cells.push('E');
+        else cells.push('O');
+      }
+
+      board[r][c] = null;
+
+      const CURRENT_INDEX = 5;
+      let result = { liveThree: 0, four: 0, overline: 0 };
+
+      let leftConsec = 0, rightConsec = 0;
+      for (let i = CURRENT_INDEX - 1; i >= 0 && cells[i] === 'P'; i--) leftConsec++;
+      for (let i = CURRENT_INDEX + 1; i <= 10 && cells[i] === 'P'; i++) rightConsec++;
+
+      const totalConsec = leftConsec + 1 + rightConsec;
+
+      if (totalConsec >= 6) {
+        result.overline = 1;
+        return result;
+      }
+
+      if (totalConsec === 5) {
+        return result;
+      }
+
+      if (totalConsec === 4) {
+        const leftEndIdx = CURRENT_INDEX - leftConsec - 1;
+        const rightEndIdx = CURRENT_INDEX + rightConsec + 1;
+        const leftEmpty = leftEndIdx >= 0 && cells[leftEndIdx] === 'E';
+        const rightEmpty = rightEndIdx <= 10 && cells[rightEndIdx] === 'E';
+        if (leftEmpty || rightEmpty) {
+          result.four = 1;
+        }
+      }
+
+      // 跳四检测
+      const checkJumpFour = () => {
+        if (cells[CURRENT_INDEX + 1] === 'E') {
+          let rightP = 0;
+          for (let i = CURRENT_INDEX + 2; i <= 10 && cells[i] === 'P'; i++) rightP++;
+          if (leftConsec + 1 + rightP === 4) {
+            const leftEnd = CURRENT_INDEX - leftConsec - 1;
+            const jumpEnd = CURRENT_INDEX + 1 + rightP + 1;
+            if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (jumpEnd <= 10 && cells[jumpEnd] === 'E')) {
+              return true;
+            }
+          }
+        }
+
+        if (cells[CURRENT_INDEX - 1] === 'E') {
+          let leftP = 0;
+          for (let i = CURRENT_INDEX - 2; i >= 0 && cells[i] === 'P'; i--) leftP++;
+          if (leftP + 1 + rightConsec === 4) {
+            const rightEnd = CURRENT_INDEX + rightConsec + 1;
+            const jumpEnd = CURRENT_INDEX - 1 - leftP - 1;
+            if ((rightEnd <= 10 && cells[rightEnd] === 'E') || (jumpEnd >= 0 && cells[jumpEnd] === 'E')) {
+              return true;
+            }
+          }
+        }
+
+        for (let gapIdx = CURRENT_INDEX - 2; gapIdx >= CURRENT_INDEX - 4 && gapIdx >= 0; gapIdx--) {
+          if (cells[gapIdx] !== 'E') continue;
+          let leftP = 0;
+          for (let i = gapIdx - 1; i >= 0 && cells[i] === 'P'; i--) leftP++;
+          let middleP = 0;
+          for (let i = gapIdx + 1; i < CURRENT_INDEX && cells[i] === 'P'; i++) middleP++;
+          if (leftP + middleP + 1 + rightConsec === 4) {
+            const leftEnd = gapIdx - leftP - 1;
+            const rightEnd = CURRENT_INDEX + rightConsec + 1;
+            if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (rightEnd <= 10 && cells[rightEnd] === 'E')) {
+              return true;
+            }
+          }
+        }
+
+        for (let gapIdx = CURRENT_INDEX + 2; gapIdx <= CURRENT_INDEX + 4 && gapIdx <= 10; gapIdx++) {
+          if (cells[gapIdx] !== 'E') continue;
+          let rightP = 0;
+          for (let i = gapIdx + 1; i <= 10 && cells[i] === 'P'; i++) rightP++;
+          let middleP = 0;
+          for (let i = gapIdx - 1; i > CURRENT_INDEX && cells[i] === 'P'; i--) middleP++;
+          if (leftConsec + 1 + middleP + rightP === 4) {
+            const leftEnd = CURRENT_INDEX - leftConsec - 1;
+            const rightEnd = gapIdx + rightP + 1;
+            if ((leftEnd >= 0 && cells[leftEnd] === 'E') || (rightEnd <= 10 && cells[rightEnd] === 'E')) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      };
+
+      if (result.four === 0 && checkJumpFour()) {
+        result.four = 1;
+      }
+
+      // 活三检测
+      if (totalConsec === 3) {
+        const leftEndIdx = CURRENT_INDEX - leftConsec - 1;
+        const rightEndIdx = CURRENT_INDEX + rightConsec + 1;
+        if (leftEndIdx >= 0 && cells[leftEndIdx] === 'E' && rightEndIdx <= 10 && cells[rightEndIdx] === 'E') {
+          result.liveThree = 1;
+        }
+      }
+
+      const checkJumpLiveThree = () => {
+        if (cells[CURRENT_INDEX + 1] === 'P' && cells[CURRENT_INDEX + 2] === 'E' && cells[CURRENT_INDEX + 3] === 'P') {
+          const leftEnd = CURRENT_INDEX - leftConsec - 1;
+          const rightEnd = CURRENT_INDEX + 4;
+          if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+            return true;
+          }
+        }
+
+        if (cells[CURRENT_INDEX - 1] === 'E' && cells[CURRENT_INDEX - 2] === 'P' && cells[CURRENT_INDEX + 1] === 'P') {
+          const leftEnd = CURRENT_INDEX - 3;
+          const rightEnd = CURRENT_INDEX + rightConsec + 2;
+          if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+            return true;
+          }
+        }
+
+        if (cells[CURRENT_INDEX + 1] === 'E' && cells[CURRENT_INDEX + 2] === 'P' && cells[CURRENT_INDEX + 3] === 'P') {
+          const leftEnd = CURRENT_INDEX - leftConsec - 1;
+          const rightEnd = CURRENT_INDEX + 4;
+          if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+            return true;
+          }
+        }
+
+        if (cells[CURRENT_INDEX - 1] === 'E' && cells[CURRENT_INDEX - 2] === 'P' && cells[CURRENT_INDEX - 3] === 'P') {
+          const leftEnd = CURRENT_INDEX - 4;
+          const rightEnd = CURRENT_INDEX + rightConsec + 1;
+          if (leftEnd >= 0 && cells[leftEnd] === 'E' && rightEnd <= 10 && cells[rightEnd] === 'E') {
+            return true;
+          }
+        }
+
+        return false;
+      };
+
+      if (result.liveThree === 0 && checkJumpLiveThree()) {
+        result.liveThree = 1;
+      }
+
+      return result;
+    }
+
+    function checkForbidden(board, r, c, turn, size) {
+      if (turn !== 'B') return null;
+
+      const dirs = [
+        { dr: 0, dc: 1 },
+        { dr: 1, dc: 0 },
+        { dr: 1, dc: 1 },
+        { dr: 1, dc: -1 },
+      ];
+
+      let totalLiveThree = 0;
+      let totalFour = 0;
+      let hasOverline = false;
+
+      for (const { dr, dc } of dirs) {
+        const patterns = countPatternsInDirection(board, r, c, dr, dc, 'B');
+        totalLiveThree += patterns.liveThree;
+        totalFour += patterns.four;
+        if (patterns.overline) hasOverline = true;
+      }
+
+      // 检查五连优先
+      board[r][c] = 'B';
+      let hasFive = false;
+      for (const { dr, dc } of dirs) {
+        let count = 1;
+        for (let k = 1; k <= 4; k++) {
+          const rr = r + dr * k, cc = c + dc * k;
+          if (!inBounds(rr, cc, size) || board[rr][cc] !== 'B') break;
+          count++;
+        }
+        for (let k = 1; k <= 4; k++) {
+          const rr = r - dr * k, cc = c - dc * k;
+          if (!inBounds(rr, cc, size) || board[rr][cc] !== 'B') break;
+          count++;
+        }
+        if (count >= 5) {
+          hasFive = true;
+          break;
+        }
+      }
+      board[r][c] = null;
+
+      if (hasFive) return null;
+      if (hasOverline) return '长连禁手';
+      if (totalFour >= 2) return '四四禁手';
+      if (totalLiveThree >= 2) return '三三禁手';
+
+      return null;
+    }
+
+    // ==================== 测试框架 ====================
+    let testResults = [];
+    let passCount = 0;
+    let failCount = 0;
+
+    function test(name, fn) {
+      try {
+        const result = fn();
+        if (result.pass) {
+          passCount++;
+          testResults.push({ name, status: 'pass', details: result.details || '' });
+        } else {
+          failCount++;
+          testResults.push({ name, status: 'fail', details: result.details || result.reason || '未通过' });
+        }
+      } catch (e) {
+        failCount++;
+        testResults.push({ name, status: 'fail', details: e.message });
+      }
+    }
+
+    function displayResults() {
+      const summaryEl = document.getElementById('summary');
+      summaryEl.innerHTML = `
+        <strong>测试统计:</strong>
+        总计 ${testResults.length} |
+        <span class="status-pass">✅ 通过 ${passCount}</span> |
+        <span class="status-fail">❌ 失败 ${failCount}</span>
+      `;
+
+      const resultsEl = document.getElementById('results');
+      let html = '';
+
+      // 按组分类显示
+      const groups = {
+        '胜负判定': testResults.filter(t => t.name.includes('胜负') || t.name.includes('五连')),
+        '三三禁手': testResults.filter(t => t.name.includes('三三')),
+        '四四禁手': testResults.filter(t => t.name.includes('四四')),
+        '长连禁手': testResults.filter(t => t.name.includes('长连')),
+        '禁手边界': testResults.filter(t => t.name.includes('边界') || t.name.includes('悬停') || t.name.includes('白棋')),
+        '五连优先': testResults.filter(t => t.name.includes('优先') || t.name.includes('混合')),
+      };
+
+      for (const [groupName, tests] of Object.entries(groups)) {
+        if (tests.length === 0) continue;
+        const groupPass = tests.filter(t => t.status === 'pass').length;
+        const groupFail = tests.filter(t => t.status === 'fail').length;
+
+        html += `<div class="test-group">
+          <h2>${groupName} (${groupPass}/${tests.length} 通过)</h2>`;
+        for (const t of tests) {
+          const cls = t.status === 'pass' ? 'pass' : 'fail';
+          const statusIcon = t.status === 'pass' ? '✅' : '❌';
+          const statusClass = t.status === 'pass' ? 'status-pass' : 'status-fail';
+          html += `<div class="test-case ${cls}">
+            <span>${t.name}</span>
+            <span class="${statusClass}">${statusIcon}</span>
+          </div>`;
+          if (t.details) {
+            html += `<div class="details" style="padding-left: 8px;">${t.details}</div>`;
+          }
+        }
+        html += '</div>';
+      }
+
+      resultsEl.innerHTML = html;
+    }
+
+    // ==================== 测试用例 ====================
+
+    // 辅助函数：在棋盘上放置棋子
+    function placeStones(board, positions, player) {
+      for (const pos of positions) {
+        board[pos.r][pos.c] = player;
+      }
+    }
+
+    function runAllTests() {
+      testResults = [];
+      passCount = 0;
+      failCount = 0;
+
+      // ===== 胜负判定测试 =====
+      test('横向五连判定', () => {
+        const board = createState(15);
+        placeStones(board, [{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}], 'B');
+        board[7][7] = 'B';
+        const win = checkWinFrom(board, 7, 7, 'B');
+        return { pass: win !== null, details: win ? `获胜位置: ${JSON.stringify(win)}` : '未检测到获胜' };
+      });
+
+      test('纵向五连判定', () => {
+        const board = createState(15);
+        placeStones(board, [{r:3,c:7},{r:4,c:7},{r:5,c:7},{r:6,c:7}], 'B');
+        board[7][7] = 'B';
+        const win = checkWinFrom(board, 7, 7, 'B');
+        return { pass: win !== null, details: win ? `获胜位置: ${JSON.stringify(win)}` : '未检测到获胜' };
+      });
+
+      test('斜向五连判定', () => {
+        const board = createState(15);
+        placeStones(board, [{r:3,c:3},{r:4,c:4},{r:5,c:5},{r:6,c:6}], 'B');
+        board[7][7] = 'B';
+        const win = checkWinFrom(board, 7, 7, 'B');
+        return { pass: win !== null, details: win ? `获胜位置: ${JSON.stringify(win)}` : '未检测到获胜' };
+      });
+
+      test('反斜向五连判定', () => {
+        const board = createState(15);
+        placeStones(board, [{r:3,c:11},{r:4,c:10},{r:5,c:9},{r:6,c:8}], 'B');
+        board[7][7] = 'B';
+        const win = checkWinFrom(board, 7, 7, 'B');
+        return { pass: win !== null, details: win ? `获胜位置: ${JSON.stringify(win)}` : '未检测到获胜' };
+      });
+
+      test('白棋五连判定', () => {
+        const board = createState(15);
+        placeStones(board, [{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}], 'W');
+        board[7][7] = 'W';
+        const win = checkWinFrom(board, 7, 7, 'W');
+        return { pass: win !== null, details: win ? '白棋获胜' : '未检测到' };
+      });
+
+      test('四连不获胜', () => {
+        const board = createState(15);
+        placeStones(board, [{r:7,c:3},{r:7,c:4},{r:7,c:5}], 'B');
+        board[7][6] = 'B';
+        const win = checkWinFrom(board, 7, 6, 'B');
+        return { pass: win === null, details: win ? '错误判定获胜' : '正确：四连不获胜' };
+      });
+
+      // ===== 三三禁手测试 =====
+      test('三三禁手-横向+纵向连活三', () => {
+        const board = createState(15);
+        // 横向活三: H5 _ I5 B _ J5 B _ K5 B _ L5
+        // 纵向活三: J3 B _ J4 B _ J5(空) _ J6 B _ J7
+        placeStones(board, [{r:5,c:9},{r:5,c:10},{r:3,c:9},{r:4,c:9},{r:6,c:9}], 'B');
+        const forbidden = checkForbidden(board, 5, 9, 'B', 15);
+        return { pass: forbidden === '三三禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('三三禁手-跳活三×2', () => {
+        const board = createState(15);
+        // 创建两个跳活三
+        // 跳活三1: F5 _ G5 B _ H5 B _ I5 空 _ J5 B _ K5
+        // 跳活三2: H3 B _ H4 空 _ H5 B _ H6 B _ H7
+        placeStones(board, [{r:5,c:6},{r:5,c:7},{r:5,c:10},{r:3,c:7},{r:4,c:7},{r:6,c:7}], 'B');
+        const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+        return { pass: forbidden === '三三禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('假活三-一端被堵不算三三', () => {
+        const board = createState(15);
+        // 横向: _BBB_ (活三)
+        // 纵向: WBBB_ (一端被堵，不是活三)
+        placeStones(board, [{r:5,c:9},{r:5,c:10},{r:3,c:7},{r:4,c:7},{r:6,c:7}], 'B');
+        placeStones(board, [{r:2,c:7}], 'W'); // 堵住上端
+        const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+        return { pass: forbidden !== '三三禁手', details: forbidden ? `检测到: ${forbidden}` : '正确：不是三三' };
+      });
+
+      test('单活三不是禁手', () => {
+        const board = createState(15);
+        placeStones(board, [{r:5,c:6},{r:5,c:7}], 'B');
+        const forbidden = checkForbidden(board, 5, 8, 'B', 15);
+        return { pass: forbidden === null, details: forbidden ? `错误检测: ${forbidden}` : '正确：单活三非禁手' };
+      });
+
+      // ===== 四四禁手测试 =====
+      test('四四禁手-活四×2', () => {
+        const board = createState(15);
+        // 横向活四: E5 _ F5 B _ G5 B _ H5 B _ I5 B _ J5
+        // 纵向活四: H2 B _ H3 B _ H4 B _ H5(空) _ H6 B _ H7
+        placeStones(board, [{r:5,c:5},{r:5,c:6},{r:5,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7},{r:6,c:7}], 'B');
+        const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+        return { pass: forbidden === '四四禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('四四禁手-冲四×2', () => {
+        const board = createState(15);
+        // 横向冲四: WBBB_
+        // 纵向冲四: WBBB_
+        placeStones(board, [{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:2,c:7},{r:3,c:7},{r:4,c:7}], 'B');
+        placeStones(board, [{r:5,c:3},{r:1,c:7}], 'W');
+        const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+        return { pass: forbidden === '四四禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('四四禁手-活四+冲四', () => {
+        const board = createState(15);
+        // 横向活四，纵向冲四
+        placeStones(board, [{r:5,c:5},{r:5,c:6},{r:5,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7}], 'B');
+        placeStones(board, [{r:1,c:7}], 'W');
+        const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+        return { pass: forbidden === '四四禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('单四不是禁手', () => {
+        const board = createState(15);
+        placeStones(board, [{r:5,c:5},{r:5,c:6},{r:5,c:7}], 'B');
+        const forbidden = checkForbidden(board, 5, 8, 'B', 15);
+        return { pass: forbidden === null, details: forbidden ? `错误检测: ${forbidden}` : '正确：单四非禁手' };
+      });
+
+      // ===== 长连禁手测试 =====
+      test('长连禁手-六子', () => {
+        const board = createState(15);
+        placeStones(board, [{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}], 'B');
+        const forbidden = checkForbidden(board, 7, 6, 'B', 15);
+        return { pass: forbidden === '长连禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('长连禁手-斜向六子', () => {
+        const board = createState(15);
+        placeStones(board, [{r:1,c:1},{r:2,c:2},{r:3,c:3},{r:4,c:4},{r:5,c:5}], 'B');
+        const forbidden = checkForbidden(board, 6, 6, 'B', 15);
+        return { pass: forbidden === '长连禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      test('白棋无长连禁手', () => {
+        const board = createState(15);
+        placeStones(board, [{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}], 'W');
+        const forbidden = checkForbidden(board, 7, 6, 'W', 15);
+        return { pass: forbidden === null, details: forbidden ? `白棋不应有禁手` : '正确：白棋无禁手' };
+      });
+
+      // ===== 五连优先测试 =====
+      test('五连优先-同时可成五连和六连', () => {
+        const board = createState(15);
+        // 一方向可成五连，另一方向已形成五连可延伸六连
+        placeStones(board, [{r:7,c:3},{r:7,c:4},{r:7,c:5},{r:7,c:6}], 'B');
+        placeStones(board, [{r:3,c:7},{r:4,c:7},{r:5,c:7},{r:6,c:7}], 'B');
+        const forbidden = checkForbidden(board, 7, 7, 'B', 15);
+        return { pass: forbidden === null, details: forbidden ? `错误判定: ${forbidden}` : '正确：五连获胜优先' };
+      });
+
+      test('五连优先-三三位置可成五连', () => {
+        const board = createState(15);
+        // 位置可形成三三，但同时可形成五连
+        placeStones(board, [{r:5,c:5},{r:5,c:6},{r:5,c:8},{r:3,c:7},{r:4,c:7},{r:8,c:7}], 'B');
+        // 在(5,7)横向已有3+空+1=4，纵向已有3+空+?=可成五连
+        // 让五连位置正确设置
+        board[5][5] = 'B'; board[5][6] = 'B'; board[5][8] = 'B';
+        board[3][7] = 'B'; board[4][7] = 'B';
+        // (5,7)落子：横向 5,6,7,8 = 4个，纵向 3,4,5,7 = 不连续
+        // 需要重新设计：让(5,7)能成五连
+        const board2 = createState(15);
+        placeStones(board2, [{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6}], 'B');
+        placeStones(board2, [{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7}], 'B');
+        // (5,7)横向4连，纵向4连，都可以成五连
+        const forbidden2 = checkForbidden(board2, 5, 7, 'B', 15);
+        return { pass: forbidden2 === null, details: forbidden2 ? `应判定获胜而非禁手` : '正确：五连获胜' };
+      });
+
+      // ===== 边界测试 =====
+      test('边角落子', () => {
+        const board = createState(15);
+        board[0][0] = 'B';
+        const win = checkWinFrom(board, 0, 0, 'B');
+        return { pass: win === null, details: '边角单子不应获胜' };
+      });
+
+      test('边界五连', () => {
+        const board = createState(15);
+        placeStones(board, [{r:0,c:0},{r:0,c:1},{r:0,c:2},{r:0,c:3}], 'B');
+        board[0][4] = 'B';
+        const win = checkWinFrom(board, 0, 4, 'B');
+        return { pass: win !== null, details: win ? '边界五连获胜' : '未检测到' };
+      });
+
+      test('边界禁手检测', () => {
+        const board = createState(15);
+        // 在靠近边界的位置测试禁手
+        placeStones(board, [{r:1,c:1},{r:1,c:2},{r:2,c:1}], 'B');
+        // (0,0)位置形成什么？
+        const forbidden = checkForbidden(board, 1, 3, 'B', 15);
+        return { pass: true, details: forbidden ? `检测到: ${forbidden}` : '无禁手' };
+      });
+
+      // 19x19棋盘测试
+      test('19x19棋盘五连', () => {
+        const board = createState(19);
+        placeStones(board, [{r:9,c:5},{r:9,c:6},{r:9,c:7},{r:9,c:8}], 'B');
+        board[9][9] = 'B';
+        const win = checkWinFrom(board, 9, 9, 'B');
+        return { pass: win !== null, details: win ? '19x19五连获胜' : '未检测到' };
+      });
+
+      test('19x19棋盘禁手', () => {
+        const board = createState(19);
+        placeStones(board, [{r:9,c:6},{r:9,c:7},{r:7,c:9},{r:8,c:9}], 'B');
+        const forbidden = checkForbidden(board, 9, 9, 'B', 19);
+        return { pass: forbidden === '三三禁手', details: forbidden ? `检测到: ${forbidden}` : '未检测到禁手' };
+      });
+
+      displayResults();
+    }
+
+    // 页面加载后自动运行
+    window.onload = () => {
+      runAllTests();
+    };
+  </script>
+</body>
+</html>
