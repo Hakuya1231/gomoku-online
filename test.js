@@ -583,6 +583,59 @@ test('19x19棋盘-长连禁手', () => {
   return { pass: forbidden === '长连禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
 });
 
+// ===== 白先模式禁手测试 =====
+console.log('\n--- 白先模式禁手测试 (6) ---');
+
+test('白先模式-黑棋仍有禁手(三三)', () => {
+  const board = createState(15);
+  // 白先模式：白棋已落子，现在轮到黑棋
+  // 黑棋在(5,11)形成三三
+  placeStones(board, [{r:5,c:9},{r:5,c:10},{r:3,c:11},{r:4,c:11}], 'B');
+  placeStones(board, [{r:7,c:7}], 'W'); // 白棋已落子
+  const forbidden = checkForbidden(board, 5, 11, 'B', 15);
+  return { pass: forbidden === '三三禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
+});
+
+test('白先模式-黑棋仍有禁手(四四)', () => {
+  const board = createState(15);
+  placeStones(board, [{r:5,c:5},{r:5,c:6},{r:5,c:7},{r:2,c:8},{r:3,c:8},{r:4,c:8}], 'B');
+  placeStones(board, [{r:7,c:7}], 'W');
+  const forbidden = checkForbidden(board, 5, 8, 'B', 15);
+  return { pass: forbidden === '四四禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
+});
+
+test('白先模式-黑棋仍有禁手(长连)', () => {
+  const board = createState(15);
+  placeStones(board, [{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}], 'B');
+  placeStones(board, [{r:8,c:8}], 'W');
+  const forbidden = checkForbidden(board, 7, 6, 'B', 15);
+  return { pass: forbidden === '长连禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
+});
+
+test('白先模式-白棋无禁手', () => {
+  const board = createState(15);
+  // 白棋形成可以成六连的位置
+  placeStones(board, [{r:7,c:1},{r:7,c:2},{r:7,c:3},{r:7,c:4},{r:7,c:5}], 'W');
+  const forbidden = checkForbidden(board, 7, 6, 'W', 15);
+  return { pass: forbidden === null, details: forbidden ? '白棋不应有禁手' : '正确：白棋无禁手' };
+});
+
+test('白先模式-黑棋五连优先', () => {
+  const board = createState(15);
+  placeStones(board, [{r:5,c:3},{r:5,c:4},{r:5,c:5},{r:5,c:6},{r:1,c:7},{r:2,c:7},{r:3,c:7},{r:4,c:7}], 'B');
+  placeStones(board, [{r:8,c:8}], 'W');
+  const forbidden = checkForbidden(board, 5, 7, 'B', 15);
+  return { pass: forbidden === null, details: forbidden ? '错误判定: ' + forbidden : '正确：五连获胜' };
+});
+
+test('黑先模式-黑棋禁手正常', () => {
+  const board = createState(15);
+  // 黑先模式，黑棋第一手就有禁手检测
+  placeStones(board, [{r:5,c:9},{r:5,c:10},{r:3,c:11},{r:4,c:11}], 'B');
+  const forbidden = checkForbidden(board, 5, 11, 'B', 15);
+  return { pass: forbidden === '三三禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
+});
+
 // ===== 输出结果 =====
 console.log('\n========================================');
 console.log('测试结果统计');
