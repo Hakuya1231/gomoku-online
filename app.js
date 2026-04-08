@@ -485,6 +485,16 @@ function undo() {
   // 如果是联机模式，发送悔棋消息
   if (state.mode === "ONLINE" && state.network.connected && window.gomokuNetwork) {
     window.gomokuNetwork.sendUndo();
+    // 主机悔棋后同步状态给观战者
+    if (state.network.role === 'host') {
+      window.gomokuNetwork.sendBoardState(
+        state.board,
+        state.moves,
+        state.turn,
+        state.winner,
+        state.winningLine
+      );
+    }
   }
 
   updateUI();
@@ -522,7 +532,21 @@ function updateUI() {
   }
 
   statusEl.textContent = statusText;
-  btnUndo.disabled = state.moves.length === 0 || state.aiThinking;
+
+  // 按钮禁用逻辑
+  let undoDisabled = state.moves.length === 0 || state.aiThinking;
+  // 观战者不能悔棋
+  if (state.mode === "ONLINE" && state.network.role === 'spectator') {
+    undoDisabled = true;
+  }
+  // 联机模式：只有当前回合的一方可以悔棋
+  if (state.mode === "ONLINE" && state.network.role !== 'spectator' && state.network.connected) {
+    if (state.human !== state.turn) {
+      undoDisabled = true;
+    }
+  }
+  btnUndo.disabled = undoDisabled;
+
   moveCountEl.textContent = String(state.moves.length);
   const last = state.moves[state.moves.length - 1];
   lastMoveEl.textContent = last ? `${last.p === "B" ? "\u9ed1" : "\u767d"} @ ${cellToLabel(last.r, last.c)}` : "-";
@@ -915,28 +939,26 @@ function initNetwork() {
         return;
       }
 
-      // 对战者检查是否是对手的回合
-      if (state.turn !== state.human) {
-        placeInternal(r, c);
-      }
+      // 对战者：收到的是对手的落子，直接渲染
+      // 跳过回合检查，因为消息本身就是对手发的
+      placeInternal(r, c);
     },
     onUndo: () => {
       // 收到悔棋消息
       if (!state.network.connected) return;
 
-      // 观战者直接执行悔棋（绕过权限检查，悔两步）
+      // 观战者不执行悔棋，等待主机同步状态
       if (state.network.role === 'spectator') {
-        doUndoOne();
-        if (state.moves.length > 0) {
-          doUndoOne();
-        }
-        updateUI();
-        draw();
         return;
       }
 
-      // 对战者正常处理
-      undo();
+      // 对战者执行悔棋（本地也执行两步）
+      doUndoOne();
+      if (state.moves.length > 0) {
+        doUndoOne();
+      }
+      updateUI();
+      draw();
     },
     onReset: (size, first) => {
       // 收到对手重开
