@@ -398,6 +398,27 @@ export function createGame({ elements, renderer, network, maybeAIMove } = {}) {
     return true;
   }
 
+  function placeRemote(r, c, playerSide) {
+    const state = getState();
+    if (!playerSide) return false;
+    if (state.winner) return false;
+    if (state.board[r][c]) return false;
+
+    const p = playerSide;
+    state.board[r][c] = p;
+    state.moves.push({ r, c, p });
+    const winLine = checkWinFrom(r, c, p);
+    if (winLine) {
+      state.winner = p;
+      state.winningLine = winLine;
+    } else {
+      state.turn = nextPlayer(p);
+    }
+    updateUI();
+    draw();
+    return true;
+  }
+
   function place(r, c) {
     const state = getState();
     if (state.mode === "AI" && state.turn !== state.human) return;
@@ -439,6 +460,7 @@ export function createGame({ elements, renderer, network, maybeAIMove } = {}) {
     draw,
     place,
     placeInternal,
+    placeRemote,
     checkForbiddenAt,
     checkWinFrom,
   };

@@ -106,11 +106,11 @@ export function createNetworkBridge({ elements, game, network } = {}) {
 
   function initNetwork() {
     network.init({
-      onMove: (r, c) => {
+      onMove: (r, c, playerSide) => {
         const state = getState();
         if (!state.network.connected) return;
         // 对战/观战统一：收到落子就渲染
-        game.placeInternal(r, c);
+        game.placeRemote(r, c, playerSide);
       },
       onReset: (size) => {
         const state = getState();
