@@ -774,6 +774,8 @@ test.describe('Gomoku Game', () => {
       // 主机开启禁手规则
       await hostPage.locator('#toggleForbidden + .slider').click();
       await hostPage.waitForTimeout(100);
+      // 主机执黑，便于验证“黑棋三三禁手不能下”
+      await hostPage.selectOption('#humanSide', 'B');
 
       // 切换到联机模式并创建房间
       await hostPage.selectOption('#gameMode', 'ONLINE');
@@ -791,6 +793,34 @@ test.describe('Gomoku Game', () => {
       await expect
         .poll(async () => await guestPage.locator('#toggleForbidden').isChecked(), { timeout: 15000 })
         .toBe(true);
+
+      // 回归：联机模式下三三禁手必须阻止黑棋落子（避免仅联机模式漏判）
+      // 构造典型“三三交叉点”局面：目标 (7,7) 在落子后形成横/纵两个活三
+      // 黑: (7,5),(7,6),(5,7),(6,7) -> 黑若下 (7,7) 为三三禁手
+      // 通过 host/guest 交替落子保持回合合法，白棋落子选择远离区域避免干扰
+      const host = hostPage;
+      const guest = guestPage;
+      const fillerW = [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, 3],
+      ];
+
+      await clickAt(host, 7, 5); // B
+      await clickAt(guest, ...fillerW[0]); // W
+      await clickAt(host, 7, 6); // B
+      await clickAt(guest, ...fillerW[1]); // W
+      await clickAt(host, 5, 7); // B
+      await clickAt(guest, ...fillerW[2]); // W
+      await clickAt(host, 6, 7); // B
+      await clickAt(guest, ...fillerW[3]); // W
+
+      const moveCountBefore = await host.locator('#moveCount').textContent();
+      await clickAt(host, 7, 7); // should be forbidden for black
+      await expect
+        .poll(async () => await host.locator('#moveCount').textContent(), { timeout: 3000 })
+        .toBe(moveCountBefore);
 
       await hostContext.close();
       await guestContext.close();

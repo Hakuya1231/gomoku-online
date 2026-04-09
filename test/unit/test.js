@@ -21,6 +21,36 @@ function clamp(v, a, b) {
   return Math.max(a, Math.min(b, v));
 }
 
+function point(r, c) {
+  return { r, c };
+}
+
+function addPoint(p, dr, dc) {
+  return { r: p.r + dr, c: p.c + dc };
+}
+
+function inBoundsPoint(p, size) {
+  return inBounds(p.r, p.c, size);
+}
+
+function transformDelta({ r, c }, rot, mirror) {
+  let rr = r;
+  let cc = c;
+  if (mirror) cc = -cc; // mirror across vertical axis
+  // rot in [0,1,2,3] for 0/90/180/270 degrees
+  if (rot === 1) return { r: cc, c: -rr };
+  if (rot === 2) return { r: -rr, c: -cc };
+  if (rot === 3) return { r: -cc, c: rr };
+  return { r: rr, c: cc };
+}
+
+function transformTemplate({ stones, target }, rot, mirror) {
+  return {
+    target: transformDelta(target, rot, mirror),
+    stones: stones.map((p) => transformDelta(p, rot, mirror)),
+  };
+}
+
 // ==================== 胜负判定函数 ====================
 function checkWinFrom(board, r, c, p) {
   const size = board.length;
@@ -588,6 +618,86 @@ test('19x19棋盘-长连禁手', () => {
   placeStones(board, [{r:9,c:3},{r:9,c:4},{r:9,c:5},{r:9,c:6},{r:9,c:7}], 'B');
   const forbidden = checkForbidden(board, 9, 8, 'B', 19);
   return { pass: forbidden === '长连禁手', details: forbidden ? '检测到: ' + forbidden : '未检测到禁手' };
+});
+
+// ===== 19x19 三三形态覆盖（旋转/镜像/边界） =====
+console.log('\n--- 19x19 三三形态覆盖（旋转/镜像/边界） ---');
+
+function runDoubleThreeSuite({ name, stones, target }) {
+  const size = 19;
+  const transforms = [];
+  for (const mirror of [false, true]) {
+    for (const rot of [0, 1, 2, 3]) {
+      transforms.push({ rot, mirror, key: `rot${rot * 90}${mirror ? '+mirror' : ''}` });
+    }
+  }
+
+  const targets = [
+    point(9, 9), // center
+    // 靠边但仍保留“活三”的两端空位（避免边界把一端堵死导致形态变化）
+    point(4, 9),
+    point(9, 4),
+    point(4, 4),
+    point(4, 14),
+    point(14, 4),
+    point(14, 14),
+  ];
+
+  for (const t of transforms) {
+    const tt = transformTemplate({ stones, target }, t.rot, t.mirror);
+    for (const desiredTarget of targets) {
+      const board = createState(size);
+
+      // 把变换后的模板 target 平移到 desiredTarget
+      const baseTarget = desiredTarget;
+      const realTarget = addPoint(baseTarget, tt.target.r, tt.target.c);
+      if (!inBoundsPoint(realTarget, size)) continue;
+
+      const realStones = tt.stones.map((d) => addPoint(baseTarget, d.r, d.c));
+      if (!realStones.every((p) => inBoundsPoint(p, size))) continue;
+
+      // 防止与目标点重叠
+      if (realStones.some((p) => p.r === realTarget.r && p.c === realTarget.c)) continue;
+
+      placeStones(board, realStones, 'B');
+      const forbidden = checkForbidden(board, realTarget.r, realTarget.c, 'B', size);
+      if (forbidden !== '三三禁手') {
+        const msg =
+          `19x19 三三漏判: template=${name} transform=${t.key} baseTarget=(${baseTarget.r},${baseTarget.c}) ` +
+          `target=(${realTarget.r},${realTarget.c}) got=${String(forbidden)} stones=` +
+          realStones.map((p) => `(${p.r},${p.c})`).join(',');
+        throw new Error(msg);
+      }
+    }
+  }
+}
+
+test('19x19 三三覆盖-连活三×2（参考既有用例形态）', () => {
+  // 来自既有 19×19 用例：在 target 落子后形成两个活三（横向+纵向）
+  runDoubleThreeSuite({
+    name: 'LL_ref',
+    target: point(0, 0),
+    stones: [point(0, -3), point(0, -2), point(-2, 0), point(-1, 0)],
+  });
+  return { pass: true, details: 'ok' };
+});
+
+test('19x19 三三覆盖-连活三×2（相邻十字）', () => {
+  runDoubleThreeSuite({
+    name: 'LL_adjacent_cross',
+    target: point(0, 0),
+    stones: [point(0, -1), point(0, 1), point(-1, 0), point(1, 0)],
+  });
+  return { pass: true, details: 'ok' };
+});
+
+test('19x19 三三覆盖-连活三+连活三（长短臂组合）', () => {
+  runDoubleThreeSuite({
+    name: 'LL_mixed_arms',
+    target: point(0, 0),
+    stones: [point(0, -2), point(0, -1), point(1, 0), point(2, 0)],
+  });
+  return { pass: true, details: 'ok' };
 });
 
 // ===== 黑棋后手禁手测试 =====

@@ -341,6 +341,10 @@ export function createGame({ elements, renderer, network, maybeAIMove } = {}) {
       const next = createState(nextSize, first);
       next.network = networkState;
       next.network.hostSide = hostSide;
+      // 联机模式下也必须保留禁手/显示等本地状态，否则 resetGame 会把禁手意外清零导致“该禁手但可落子”
+      next.forbidden = !!prev.forbidden;
+      next.showCoords = !!prev.showCoords;
+      next.showHints = !!prev.showHints;
 
       if (next.network.role === "host") {
         next.human = hostSide;
