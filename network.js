@@ -1,5 +1,5 @@
 // 五子棋网络模块 - 使用 Firebase Realtime Database
-class GomokuNetwork {
+export class GomokuNetwork {
   constructor() {
     this.database = null;
     this.roomId = null;
@@ -12,6 +12,7 @@ class GomokuNetwork {
 
     // 回调函数
     this.onMove = null;
+    // 已拍板：不提供悔棋功能（保留字段但不再触发/发送 undo 消息）
     this.onUndo = null;
     this.onReset = null;
     this.onConnectionChange = null;
@@ -390,12 +391,7 @@ class GomokuNetwork {
     });
   }
 
-  // 发送悔棋
-  sendUndo() {
-    return this.send({
-      type: 'undo'
-    });
-  }
+  // 悔棋功能已移除：不再发送 undo 消息
 
   // 发送重开
   sendReset(size) {
@@ -509,5 +505,6 @@ class GomokuNetwork {
   }
 }
 
-// 创建全局网络实例
-window.gomokuNetwork = new GomokuNetwork();
+export function createGomokuNetwork() {
+  return new GomokuNetwork();
+}

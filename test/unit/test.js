@@ -17,6 +17,10 @@ function inBounds(r, c, size) {
   return r >= 0 && c >= 0 && r < size && c < size;
 }
 
+function clamp(v, a, b) {
+  return Math.max(a, Math.min(b, v));
+}
+
 // ==================== 胜负判定函数 ====================
 function checkWinFrom(board, r, c, p) {
   const size = board.length;
@@ -39,7 +43,10 @@ function checkWinFrom(board, r, c, p) {
       line.unshift({ r: rr, c: cc });
     }
     if (line.length >= 5) {
-      return line.slice(0, 5);
+      // 与主程序对齐：截取包含最后落子点 (r,c) 的 5 连片段
+      const idx = line.findIndex((x) => x.r === r && x.c === c);
+      const start = clamp(idx - 4, 0, line.length - 5);
+      return line.slice(start, start + 5);
     }
   }
   return null;
