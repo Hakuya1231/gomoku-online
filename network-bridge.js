@@ -163,12 +163,16 @@ export function createNetworkBridge({ elements, game, network } = {}) {
       onConnectionChange: (connected) => {
         const state = getState();
         state.network.connected = connected;
+        if (connected) {
+          // 先写入 role/roomId，再刷新 UI（否则 subtitle 可能用旧 role 渲染成“联机对战”而非“观战模式”）
+          state.network.role = network.role;
+          state.network.roomId = network.getRoomId();
+        }
+
         game.updateGameModeUI();
         game.updateUI();
 
         if (connected) {
-          state.network.role = network.role;
-          state.network.roomId = network.getRoomId();
 
           if (btnDisconnect) btnDisconnect.style.display = "block";
           if (roomIdDisplayEl) roomIdDisplayEl.textContent = state.network.roomId;
@@ -201,8 +205,8 @@ export function createNetworkBridge({ elements, game, network } = {}) {
 
         game.resetGame({ size });
         state.forbidden = !!forbidden;
-        game.updateSubtitle();
         game.updateGameModeUI();
+        game.updateUI();
         game.draw();
       },
       onRoomCreated: (roomId) => {

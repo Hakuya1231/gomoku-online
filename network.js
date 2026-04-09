@@ -115,6 +115,9 @@ export class GomokuNetwork {
         timestamp: firebase.database.ServerValue.TIMESTAMP
       },
       guest: null,
+      meta: {
+        hasGuest: false,
+      },
       messages: {}
     }).then(() => {
       console.log('房间已创建:', this.roomId);
@@ -146,6 +149,8 @@ export class GomokuNetwork {
     const guestRef = this.roomRef.child('guest');
     guestRef.on('value', (snapshot) => {
       const guestData = snapshot.val();
+      // 为观战/第三人加入提供一个稳定可读的“是否已有客机”标记（避免 guest 字段偶发不可见/延迟）
+      this.roomRef.child('meta/hasGuest').set(!!guestData).catch(() => {});
       if (guestData && !this.connected) {
         console.log('客机已加入:', guestData);
         this.connected = true;
@@ -203,14 +208,19 @@ export class GomokuNetwork {
         return;
       }
 
-      // 检查是否已有客机
-      if (roomData.guest) {
-        // 房间已满，加入为观战者
-        return this.joinAsSpectator();
-      } else {
-        // 作为客机加入
+      // 优先依据 meta.hasGuest 判断是否已满（更稳定），再回退到 guest 节点读取
+      if (roomData?.meta?.hasGuest) return this.joinAsSpectator();
+
+      const guestRef = this.roomRef.child('guest');
+      return guestRef.once('value').then((guestSnap) => {
+        if (guestSnap.val()) return this.joinAsSpectator();
         return this.joinAsGuest();
-      }
+      })
+        .catch((err) => {
+          console.error('加入房间失败:', err);
+          this.updateStatus('连接失败');
+          if (this.onError) this.onError(err);
+        });
     }).catch(err => {
       console.error('加入房间失败:', err);
       this.updateStatus('连接失败');

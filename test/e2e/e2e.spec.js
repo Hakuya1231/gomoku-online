@@ -53,6 +53,91 @@ async function clickAt(page, row, col, gridSize = 15) {
   await page.waitForTimeout(30);
 }
 
+// ==================== 联机 E2E 辅助方法（降低 sleep 依赖，提升稳定性） ====================
+async function gotoHome(page) {
+  await page.goto('http://localhost:8080/');
+  await page.waitForSelector('#board');
+}
+
+async function gotoRoom(page, roomId) {
+  await page.goto('http://localhost:8080/?room=' + roomId);
+  await page.waitForSelector('#board');
+  await expect
+    .poll(async () => page.url(), { timeout: 15000 })
+    .toContain('room=' + roomId);
+  // main.js 应根据 URL 自动切到 ONLINE 并尝试连接
+  await expect
+    .poll(async () => await page.locator('#gameMode').inputValue(), { timeout: 20000 })
+    .toBe('ONLINE');
+}
+
+async function switchToOnline(page) {
+  await page.selectOption('#gameMode', 'ONLINE');
+  await expect(page.locator('#onlinePanel')).toBeVisible();
+}
+
+async function waitForOnlineConnected(page) {
+  const conn = page.locator('#connectionStatus');
+  await expect
+    .poll(async () => ((await conn.textContent()) || '').trim(), { timeout: 20000 })
+    .toBe('已连接');
+
+  const status = page.locator('#status');
+  await expect
+    .poll(async () => (await status.textContent()) || '', { timeout: 20000 })
+    .toContain('联机');
+}
+
+async function createRoomAndGetId(hostPage) {
+  await switchToOnline(hostPage);
+  // 等待 Firebase 初始化完成（线上 RTDB 偶发较慢）
+  await expect
+    .poll(
+      async () =>
+        await hostPage.evaluate(() => {
+          try {
+            return !!window.firebase && Array.isArray(firebase.apps) && firebase.apps.length > 0;
+          } catch {
+            return false;
+          }
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  await hostPage.click('#btnCreateRoom');
+  const roomIdEl = hostPage.locator('#roomIdDisplay');
+  await expect
+    .poll(async () => ((await roomIdEl.textContent()) || '').trim(), { timeout: 20000 })
+    .toMatch(/^[A-Z0-9]{6}$/);
+  return ((await roomIdEl.textContent()) || '').trim();
+}
+
+async function waitForGuestNodeVisible(hostPage, roomId) {
+  // 使用 Firebase 直接读 guest 节点，避免「UI 已显示连接，但第三人读 room 时 guest 仍未稳定可见」的竞态
+  await expect
+    .poll(
+      async () => {
+        return await hostPage.evaluate(async (rid) => {
+          try {
+            const snap = await firebase.database().ref('rooms/' + rid + '/guest').once('value');
+            return !!snap.val();
+          } catch {
+            return false;
+          }
+        }, roomId);
+      },
+      { timeout: 20000 },
+    )
+    .toBe(true);
+}
+
+async function cleanupDisconnect(page) {
+  const btn = page.locator('#btnDisconnect');
+  if (await btn.isVisible().catch(() => false)) {
+    await btn.click();
+  }
+}
+
 test.describe('Gomoku Game', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('http://localhost:8080/');
@@ -548,26 +633,51 @@ test.describe('Gomoku Game', () => {
   // ==================== 8. 联机模式测试 ====================
 
   test.describe('联机模式测试', () => {
+    test.describe.configure({ mode: 'serial' });
+
     test('TC-110: 创建房间成功', async ({ browser }) => {
       const context = await browser.newContext();
       const page = await context.newPage();
-      await page.goto('http://localhost:8080/');
-      await page.waitForSelector('#board');
+      await gotoHome(page);
 
-      // 切换到联机模式
-      await page.selectOption('#gameMode', 'ONLINE');
-      await page.waitForTimeout(200);
-
-      // 点击创建房间
-      await page.click('#btnCreateRoom');
-      await page.waitForTimeout(2000);
-
-      // 检查房间号显示
-      const roomId = await page.locator('#roomIdDisplay').textContent();
+      const roomId = await createRoomAndGetId(page);
       expect(roomId).not.toBe('-');
       expect(roomId.length).toBe(6);
 
       await context.close();
+    });
+
+    test('TC-143: 主机执子(hostSide)同步到客机（并禁用客机设置）', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      await gotoHome(hostPage);
+
+      // 主机选择执白，然后创建房间
+      await hostPage.selectOption('#humanSide', 'W');
+      const roomId = await createRoomAndGetId(hostPage);
+
+      // 客机加入
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
+      await waitForOnlineConnected(hostPage);
+
+      // 客机的人类执子应为与主机相反的一方，并且被禁用
+      await expect(guestPage.locator('#humanSide')).toHaveValue('B');
+      await expect(guestPage.locator('#humanSide')).toBeDisabled();
+
+      // 黑先规则：此时应轮到黑方（客机）先手
+      await expect
+        .poll(async () => (await guestPage.locator('#status').textContent()) || '', { timeout: 15000 })
+        .toContain('轮到：黑方');
+
+      await cleanupDisconnect(guestPage);
+      await cleanupDisconnect(hostPage);
+      await guestContext.close();
+      await hostContext.close();
     });
 
     test('TC-140: 联机模式棋盘大小同步', async ({ browser }) => {
@@ -579,8 +689,7 @@ test.describe('Gomoku Game', () => {
       const guestPage = await guestContext.newPage();
 
       // 主机设置
-      await hostPage.goto('http://localhost:8080/');
-      await hostPage.waitForSelector('#board');
+      await gotoHome(hostPage);
 
       // 主机选择19x19棋盘
       await hostPage.selectOption('#boardSize', '19');
@@ -599,9 +708,8 @@ test.describe('Gomoku Game', () => {
       expect(roomId).not.toBe('-');
 
       // 客机加入房间（使用根URL）
-      await guestPage.goto('http://localhost:8080/?room=' + roomId);
-      await guestPage.waitForSelector('#board');
-      await guestPage.waitForTimeout(3000);
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
 
       // 检查客机是否连接成功
       const guestStatus = await guestPage.locator('#connectionStatus').textContent();
@@ -625,6 +733,35 @@ test.describe('Gomoku Game', () => {
       await guestContext.close();
     });
 
+    test('TC-141: 建房后、客机加入前修改配置（棋盘大小/禁手）应以最终配置同步', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      await gotoHome(hostPage);
+      const roomId = await createRoomAndGetId(hostPage);
+
+      // 建房后（但客机加入前）修改配置
+      await hostPage.selectOption('#boardSize', '19');
+      await hostPage.locator('#toggleForbidden + .slider').click();
+
+      // 主机本地 UI 应立即反映棋盘大小
+      await expect(hostPage.locator('#subtitle')).toContainText('19×19');
+
+      // 客机加入应拿到最终配置
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
+      await expect(guestPage.locator('#subtitle')).toContainText('19×19');
+      await expect(guestPage.locator('#toggleForbidden')).toBeChecked();
+
+      await cleanupDisconnect(guestPage);
+      await cleanupDisconnect(hostPage);
+      await guestContext.close();
+      await hostContext.close();
+    });
+
     test('TC-142: 联机模式禁手规则同步', async ({ browser }) => {
       const hostContext = await browser.newContext();
       const guestContext = await browser.newContext();
@@ -632,8 +769,7 @@ test.describe('Gomoku Game', () => {
       const hostPage = await hostContext.newPage();
       const guestPage = await guestContext.newPage();
 
-      await hostPage.goto('http://localhost:8080/');
-      await hostPage.waitForSelector('#board');
+      await gotoHome(hostPage);
 
       // 主机开启禁手规则
       await hostPage.locator('#toggleForbidden + .slider').click();
@@ -648,16 +784,126 @@ test.describe('Gomoku Game', () => {
       const roomId = await hostPage.locator('#roomIdDisplay').textContent();
 
       // 客机加入（使用根URL）
-      await guestPage.goto('http://localhost:8080/?room=' + roomId);
-      await guestPage.waitForSelector('#board');
-      await guestPage.waitForTimeout(3000);
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
 
       // 检查客机的禁手设置是否同步
-      const guestForbidden = await guestPage.locator('#toggleForbidden').isChecked();
-      expect(guestForbidden).toBe(true);
+      await expect
+        .poll(async () => await guestPage.locator('#toggleForbidden').isChecked(), { timeout: 15000 })
+        .toBe(true);
 
       await hostContext.close();
       await guestContext.close();
+    });
+
+    test('TC-144: 房间满时第三人加入应进入观战并收到 board_state', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+      const spectatorContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+      const spectatorPage = await spectatorContext.newPage();
+
+      await gotoHome(hostPage);
+      // 主机默认执黑，便于后续首手落子
+      await hostPage.selectOption('#humanSide', 'B');
+      const roomId = await createRoomAndGetId(hostPage);
+
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
+      await waitForOnlineConnected(hostPage);
+      await expect
+        .poll(async () => ((await hostPage.locator('#opponentInfo').textContent()) || '').trim(), { timeout: 15000 })
+        .toBe('已连接');
+      await waitForGuestNodeVisible(hostPage, roomId);
+
+      // 主机先落一子，确保观战者进入后能收到非空状态
+      await clickAt(hostPage, 7, 7);
+      await expect.poll(async () => await guestPage.locator('#moveCount').textContent(), { timeout: 15000 }).toBe('1');
+
+      // 第三人加入应变为观战者
+      await gotoRoom(spectatorPage, roomId);
+      await waitForOnlineConnected(spectatorPage);
+      await expect
+        .poll(async () => (await spectatorPage.locator('#subtitle').textContent()) || '', { timeout: 15000 })
+        .toContain('观战模式');
+      await expect
+        .poll(async () => ((await spectatorPage.locator('#opponentInfo').textContent()) || '').trim(), { timeout: 15000 })
+        .toBe('观战中');
+
+      // 观战者应收到 board_state（至少同步到步数/最后一步）
+      await expect
+        .poll(async () => await spectatorPage.locator('#moveCount').textContent(), { timeout: 15000 })
+        .toBe('1');
+      await expect(spectatorPage.locator('#lastMove')).toContainText('黑');
+
+      await cleanupDisconnect(guestPage);
+      await cleanupDisconnect(hostPage);
+      await spectatorContext.close();
+      await guestContext.close();
+      await hostContext.close();
+    });
+
+    test('TC-145: 客机断开后应复位 UI 并清理 URL 参数', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      await gotoHome(hostPage);
+      const roomId = await createRoomAndGetId(hostPage);
+
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
+
+      // 客机主动断开
+      await guestPage.click('#btnDisconnect');
+
+      // 断开后应回到 PVP 且隐藏联机面板
+      await expect(guestPage.locator('#gameMode')).toHaveValue('PVP');
+      await expect(guestPage.locator('#onlinePanel')).toBeHidden();
+      await expect(guestPage.locator('#roomIdDisplay')).toHaveText('-');
+      await expect(guestPage.locator('#opponentInfo')).toHaveText('-');
+      await expect
+        .poll(async () => await guestPage.evaluate(() => window.location.search), { timeout: 5000 })
+        .toBe('');
+
+      await cleanupDisconnect(hostPage);
+      await guestContext.close();
+      await hostContext.close();
+    });
+
+    test('TC-146: 最小落子同步闭环（主机->客机->主机）', async ({ browser }) => {
+      const hostContext = await browser.newContext();
+      const guestContext = await browser.newContext();
+
+      const hostPage = await hostContext.newPage();
+      const guestPage = await guestContext.newPage();
+
+      await gotoHome(hostPage);
+      await hostPage.selectOption('#humanSide', 'B');
+      const roomId = await createRoomAndGetId(hostPage);
+
+      await gotoRoom(guestPage, roomId);
+      await waitForOnlineConnected(guestPage);
+      await waitForOnlineConnected(hostPage);
+
+      // 主机先手落子
+      await clickAt(hostPage, 7, 7);
+      await expect.poll(async () => await guestPage.locator('#moveCount').textContent(), { timeout: 15000 }).toBe('1');
+      await expect(guestPage.locator('#lastMove')).toContainText('黑');
+
+      // 客机再落子
+      await clickAt(guestPage, 7, 8);
+      await expect.poll(async () => await hostPage.locator('#moveCount').textContent(), { timeout: 15000 }).toBe('2');
+      await expect(hostPage.locator('#lastMove')).toContainText('白');
+
+      await cleanupDisconnect(guestPage);
+      await cleanupDisconnect(hostPage);
+      await guestContext.close();
+      await hostContext.close();
     });
   });
 });
