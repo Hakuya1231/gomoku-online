@@ -31,3 +31,6 @@ npm-debug.log*
 dist/
 build/
 out/
+
+# Playwright artifacts
+test-results/

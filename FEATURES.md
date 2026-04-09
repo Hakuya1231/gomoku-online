@@ -79,10 +79,10 @@
 
 | 项目 | 说明 |
 |------|------|
-| `test.js`（Node） | 覆盖胜负、禁手、边界、19×19 等；`checkWinFrom` 与 `app.js` 在「五连线段截取」上可能略有差异（测试取前 5 点，主程序用 `clamp` 取含最后落子的五连段） |
-| `test.html` | 浏览器内自测；部分逻辑与 `test.js` / 主程序不完全一致，不宜作为唯一真理来源 |
-| `e2e.spec.js` | Playwright；依赖 `place` 全局或模拟点击；覆盖 UI、胜负、禁手开关、AI、19×19、部分联机 |
-| `TEST_CASES.md` / `TEST_PROGRESS.md` | 用例表与执行记录；部分条目与自动化覆盖、代码演进可能不同步，以实际测试为准 |
+| `test/unit/test.js`（Node） | 覆盖胜负、禁手、边界、19×19 等；与主程序对齐胜利线段截取规则 |
+| `test/manual/test.html` | 浏览器内自测；用于快速回归核心规则（非唯一真理来源） |
+| `test/e2e/e2e.spec.js` | Playwright；覆盖 UI、胜负、禁手开关、AI、19×19、部分联机 |
+| `test/docs/TEST_CASES.md` / `test/docs/TEST_PROGRESS.md` | 用例表与执行记录；部分条目与自动化覆盖、代码演进可能不同步，以实际测试为准 |
 
 ---
 

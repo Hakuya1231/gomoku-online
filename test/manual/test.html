@@ -76,6 +76,10 @@
       return r >= 0 && c >= 0 && r < size && c < size;
     }
 
+    function clamp(v, a, b) {
+      return Math.max(a, Math.min(b, v));
+    }
+
     // ==================== 胜负判定函数 ====================
     function checkWinFrom(board, r, c, p) {
       const size = board.length;
@@ -98,7 +102,9 @@
           line.unshift({ r: rr, c: cc });
         }
         if (line.length >= 5) {
-          return line.slice(0, 5);
+          const idx = line.findIndex((x) => x.r === r && x.c === c);
+          const start = clamp(idx - 4, 0, line.length - 5);
+          return line.slice(start, start + 5);
         }
       }
       return null;
@@ -293,7 +299,7 @@
         if (patterns.overline) hasOverline = true;
       }
 
-      // 检查五连优先
+      // 检查恰好五连（胜利优先）
       board[r][c] = 'B';
       let hasFive = false;
       for (const { dr, dc } of dirs) {
@@ -308,15 +314,17 @@
           if (!inBounds(rr, cc, size) || board[rr][cc] !== 'B') break;
           count++;
         }
-        if (count >= 5) {
+        // 只有恰好五连才是胜利，长连（六子及以上）视为禁手
+        if (count === 5) {
           hasFive = true;
           break;
         }
       }
       board[r][c] = null;
 
-      if (hasFive) return null;
+      // 先判长连，再判五连（与主程序/单测对齐）
       if (hasOverline) return '长连禁手';
+      if (hasFive) return null;
       if (totalFour >= 2) return '四四禁手';
       if (totalLiveThree >= 2) return '三三禁手';
 

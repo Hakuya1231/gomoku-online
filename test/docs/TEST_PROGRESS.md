@@ -285,11 +285,11 @@ npm run test:e2e
 
 | 文件 | 描述 |
 |------|------|
-| `test.js` | Node.js单元测试，覆盖核心游戏逻辑 |
-| `e2e.spec.js` | Playwright E2E测试，覆盖UI交互 |
-| `TEST_CASES.md` | 完整测试用例文档 |
+| `test/unit/test.js` | Node.js 单元测试，覆盖核心游戏逻辑 |
+| `test/e2e/e2e.spec.js` | Playwright E2E 测试，覆盖 UI 交互 |
+| `test/docs/TEST_CASES.md` | 完整测试用例文档 |
 | `package.json` | 项目配置，包含测试脚本 |
-| `playwright.config.js` | Playwright配置文件 |
+| `test/e2e/playwright.config.js` | Playwright 配置文件 |
 
 ---
 

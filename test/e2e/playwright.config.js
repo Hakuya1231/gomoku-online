@@ -9,7 +9,7 @@ module.exports = defineConfig({
   webServer: {
     command: 'npm start',
     port: 8080,
-    reuseExistingServer: false,
-    timeout: 10000,
+    reuseExistingServer: true,
+    timeout: 30000,
   },
 });

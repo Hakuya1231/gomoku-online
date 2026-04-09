@@ -1,5 +1,5 @@
 // Playwright E2E Tests for Gomoku
-// Run: npx playwright test e2e.spec.js
+// Run: npm run test:e2e
 
 const { test, expect } = require('@playwright/test');
 
@@ -25,38 +25,30 @@ function getClickPosition(box, row, col, gridSize = 15) {
   };
 }
 
-// Helper to click at a board position using JavaScript direct call
 async function clickAt(page, row, col, gridSize = 15) {
-  // Use evaluate to directly call the game's place function
+  // 在浏览器内精确派发 canvas click（避免缩放/四舍五入导致的 posToCell 阈值误差）
   await page.evaluate((args) => {
     const { r, c, grid } = args;
-    // Access global state and place function
-    if (typeof place === 'function') {
-      place(r, c);
-    } else if (window.state && window.state.board) {
-      // Alternative: simulate canvas click
-      const canvas = document.getElementById('board');
-      const padding = 42;
-      const gap = (canvas.width - padding * 2) / (grid - 1);
-      const x = padding + c * gap;
-      const y = padding + r * gap;
+    const canvas = document.getElementById('board');
+    if (!canvas) throw new Error('missing canvas#board');
+    const padding = 42;
+    const gap = (canvas.width - padding * 2) / (grid - 1);
+    const x = padding + c * gap;
+    const y = padding + r * gap;
 
-      // Get canvas position
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = rect.width / canvas.width;
-      const scaleY = rect.height / canvas.height;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = rect.width / canvas.width;
+    const scaleY = rect.height / canvas.height;
 
-      // Create and dispatch click event
-      const clickX = x * scaleX;
-      const clickY = y * scaleY;
+    const clientX = rect.left + x * scaleX;
+    const clientY = rect.top + y * scaleY;
 
-      const evt = new MouseEvent('click', {
-        clientX: rect.left + clickX,
-        clientY: rect.top + clickY,
-        bubbles: true
-      });
-      canvas.dispatchEvent(evt);
-    }
+    const evt = new MouseEvent('click', {
+      clientX,
+      clientY,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(evt);
   }, { r: row, c: col, grid: gridSize });
   await page.waitForTimeout(30);
 }
